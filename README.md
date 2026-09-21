@@ -1,54 +1,44 @@
-SmartFarm
-Project Structure
-SmartFarm/
-├── backend/
-└── frontend/
+# SmartFarm
 
+A full-stack web application with a React frontend and Node.js backend.
 
-backend - Node.js backend API
+## Project Structure
 
-frontend - Vite + React + TypeScript frontend
+    SmartFarm/
+    ├── backend/
+    └── frontend/
 
-Requirements
+- **backend** - Node.js backend API
+- **frontend** - Vite + React + TypeScript frontend
 
-Node.js
+## Requirements
 
-npm
+- Node.js
+- npm
 
-Installation
+## Installation
 
-Clone the repository and install the dependencies for both the backend and frontend.
+### Backend
 
-Backend
-cd backend
-npm install
+    cd backend
+    npm install
 
-Frontend
-cd frontend
-npm install
+### Frontend
 
-Running the Project
+    cd frontend
+    npm install
 
-The backend and frontend need to be run separately.
+## Running the Project
 
-1. Start the Backend
+Run the backend and frontend in separate terminals.
 
-Open a terminal:
+### Backend
 
-cd backend
-npm run dev
+    cd backend
+    npm run dev
 
-2. Start the Frontend
+### Frontend
 
-Open another terminal:
+    cd frontend
+    npm run dev
 
-cd frontend
-npm run dev
-
-
-The frontend will provide a local URL in the terminal, usually:
-
-http://localhost:5173
-
-
-Make sure the backend is running before using features that require the API.
