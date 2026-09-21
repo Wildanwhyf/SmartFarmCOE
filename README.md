@@ -42,3 +42,22 @@ Run the backend and frontend in separate terminals.
     cd frontend
     npm run dev
 
+## Database Setup
+
+This project uses MySQL through XAMPP.
+
+1. Install and open XAMPP.
+2. Start the MySQL service.
+3. Open phpMyAdmin.
+4. Create a database named `smartfarm`.
+5. Import `database/smartfarm.sql` into the `smartfarm` database.
+6. Create a `.env` file in the `backend` directory based on `.env.example`.
+7. Update the database credentials if necessary.
+
+Example:
+
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=smartfarm
+DB_PORT=3306
