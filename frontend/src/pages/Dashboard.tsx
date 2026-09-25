@@ -5,6 +5,7 @@ import NpkCard from "../components/dashboard/NpkCard";
 import LoraSignalCard from "../components/dashboard/LoraSignalCard";
 import AlertsCard from "../components/dashboard/AlertsCard";
 import type { LiveSensorApiResponse, ThresholdItem } from "../types/sensor";
+import WeatherCard from "../components/dashboard/WeatherCard";
 
 export default function Dashboard() {
   const [liveData, setLiveData] = useState<LiveSensorApiResponse["data"] | null>(null);
@@ -103,6 +104,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <WeatherCard />
           {/* Soil Moisture (checks kelembapan_tanah directly) */}
           {isEnabled("kelembapan_tanah") && (
             <SoilMoistureCard
