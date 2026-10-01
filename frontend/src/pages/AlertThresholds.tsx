@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
-import { Sliders, Save, CheckCircle2 } from "lucide-react";
+import { Sliders, Save, CheckCircle2, Eye, EyeOff, Thermometer, Sprout, Droplets } from "lucide-react";
 import Card from "../components/common/Card";
-import type { ThresholdItem, ThresholdsApiResponse } from "../types/sensor";
+import type { ThresholdItem, ThresholdsApiResponse, GuestCardConfig } from "../types/sensor";
 
 const PARAMETER_LABELS: Record<string, { label: string; unit: string }> = {
   kelembapan: { label: "Soil Moisture", unit: "%" },
@@ -16,44 +16,48 @@ const PARAMETER_LABELS: Record<string, { label: string; unit: string }> = {
 
 export default function AlertThresholds() {
   const [thresholds, setThresholds] = useState<ThresholdItem[]>([]);
+  const [viewConfig, setViewConfig] = useState<GuestCardConfig | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [savingAll, setSavingAll] = useState(false);
+  const [savingView, setSavingView] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchThresholds = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
       const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-      const res = await fetch(`${baseUrl}/thresholds`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const headers = { Authorization: `Bearer ${token}` };
 
-      if (!res.ok) {
-        throw new Error("Failed to load thresholds data.");
+      const [threshRes, viewRes] = await Promise.all([
+        fetch(`${baseUrl}/thresholds`, { headers }),
+        fetch(`${baseUrl}/config/guest-cards`, { headers })
+      ]);
+
+      if (threshRes.ok) {
+        const result: ThresholdsApiResponse = await threshRes.json();
+        setThresholds(result.data || []);
       }
 
-      const result: ThresholdsApiResponse = await res.json();
-      setThresholds(result.data || []);
+      if (viewRes.ok) {
+        const result = await viewRes.json();
+        setViewConfig(result.data);
+      }
     } catch (err) {
       console.error(err);
-      setError("Unable to load threshold settings.");
+      setError("Unable to load settings.");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchThresholds();
-  }, [fetchThresholds]);
+    fetchData();
+  }, [fetchData]);
 
-  const handleInputChange = (
-    index: number,
-    field: "min_value" | "max_value",
-    val: string
-  ) => {
+  // --- 1. Global Sensor Boundaries Handlers ---
+  const handleInputChange = (index: number, field: "min_value" | "max_value", val: string) => {
     const updated = [...thresholds];
     updated[index][field] = val;
     setThresholds(updated);
@@ -65,7 +69,7 @@ export default function AlertThresholds() {
     setThresholds(updated);
   };
 
-  const handleSaveAll = async () => {
+  const handleSaveThresholds = async () => {
     setSavingAll(true);
     setError(null);
     setSuccessMsg(null);
@@ -73,15 +77,10 @@ export default function AlertThresholds() {
     try {
       const token = localStorage.getItem("token");
       const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
-
-      // Send update requests for all parameters concurrently
       const requests = thresholds.map((item) =>
         fetch(`${baseUrl}/thresholds/${item.parameter_name}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({
             min_value: item.min_value,
             max_value: item.max_value,
@@ -91,46 +90,87 @@ export default function AlertThresholds() {
       );
 
       const responses = await Promise.all(requests);
-      const failed = responses.filter((res) => !res.ok);
+      if (responses.some((res) => !res.ok)) throw new Error("Failed to save some thresholds.");
 
-      if (failed.length > 0) {
-        throw new Error("Failed to save some threshold settings.");
-      }
-
-      setSuccessMsg("All threshold configurations saved successfully!");
-      fetchThresholds(); // Refresh to reflect updated_by and timestamps
+      setSuccessMsg("Global threshold configurations saved successfully!");
+      fetchData();
       setTimeout(() => setSuccessMsg(null), 3000);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("An unexpected error occurred while saving.");
-      }
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred.");
     } finally {
       setSavingAll(false);
     }
   };
 
+  // --- 2. Dynamic 3-Module Toggle Handlers ---
+  const handleToggleModule = (module: "soil" | "climate" | "npk") => {
+    if (!viewConfig) return;
+
+    if (module === "soil") {
+      const targetState = !viewConfig.kelembapan_tanah;
+      setViewConfig({ ...viewConfig, kelembapan_tanah: targetState });
+    } else if (module === "climate") {
+      const targetState = !(viewConfig.suhu || viewConfig.humidity || viewConfig.tekanan);
+      setViewConfig({
+        ...viewConfig,
+        suhu: targetState,
+        humidity: targetState,
+        tekanan: targetState,
+      });
+    } else if (module === "npk") {
+      const targetState = !(viewConfig.nitrogen || viewConfig.phosphorus || viewConfig.potassium);
+      setViewConfig({
+        ...viewConfig,
+        nitrogen: targetState,
+        phosphorus: targetState,
+        potassium: targetState,
+      });
+    }
+  };
+
+  const handleSaveViewConfig = async () => {
+    if (!viewConfig) return;
+    setSavingView(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    try {
+      const token = localStorage.getItem("token");
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const res = await fetch(`${baseUrl}/config/guest-cards`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(viewConfig),
+      });
+
+      if (!res.ok) throw new Error("Failed to save view settings.");
+
+      setSuccessMsg("Global view settings updated!");
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setError(err.message || "An error occurred saving global view config.");
+    } finally {
+      setSavingView(false);
+    }
+  };
+
+  // Group status helpers
+  const isSoilActive = !!viewConfig?.kelembapan_tanah;
+  const isClimateActive = !!(viewConfig?.suhu || viewConfig?.humidity || viewConfig?.tekanan);
+  const isNpkActive = !!(viewConfig?.nitrogen || viewConfig?.phosphorus || viewConfig?.potassium);
+
   return (
     <div className="px-8 py-7">
-      {/* Page Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[#152619]">
-            Alert Thresholds
-          </h1>
-          <p className="mt-1 text-sm text-[#617565]">
-            Configure trigger boundaries for sensor warnings and critical alerts
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-[#152619]">Settings & Configuration</h1>
+          <p className="mt-1 text-sm text-[#617565]">Manage sensor boundaries and global dashboard visibility</p>
         </div>
-
         {successMsg && (
           <div className="flex items-center gap-1.5 rounded-full bg-[#eef7e8] px-3.5 py-1.5 text-xs font-medium text-[#28733d]">
-            <CheckCircle2 size={15} />
-            {successMsg}
+            <CheckCircle2 size={15} /> {successMsg}
           </div>
         )}
-
         {error && (
           <div className="rounded-full bg-[#fde8e8] px-3.5 py-1.5 text-xs font-semibold text-[#e02424]">
             {error}
@@ -138,39 +178,30 @@ export default function AlertThresholds() {
         )}
       </div>
 
-      {/* Content Card */}
-      <Card className="mt-6 p-5">
+      {/* 1. Global Alert Thresholds Card (Kept Exactly As Before) */}
+      <Card className="p-5 mb-6">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#e8f6eb] text-[#28733d]">
               <Sliders size={17} />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-[#28402d]">
-                Sensor Boundaries
-              </h2>
-              <p className="text-[11px] text-[#849187]">
-                Sensors triggering outside these min/max ranges will generate live warnings
-              </p>
+              <h2 className="text-sm font-semibold text-[#28402d]">Global Sensor Boundaries</h2>
+              <p className="text-[11px] text-[#849187]">Disabling a sensor here disables alerts for EVERYONE.</p>
             </div>
           </div>
-
-          {/* Global Save Button */}
           <button
-            type="button"
+            onClick={handleSaveThresholds}
             disabled={loading || savingAll}
-            onClick={handleSaveAll}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#347b49] px-4 py-2.5 text-xs font-medium text-white shadow-xs transition hover:bg-[#286139] disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#347b49] px-4 py-2.5 text-xs font-medium text-white shadow-xs transition hover:bg-[#286139] disabled:opacity-50"
           >
             <Save size={15} />
-            {savingAll ? "Saving All Changes..." : "Save All Changes"}
+            {savingAll ? "Saving..." : "Save Boundaries"}
           </button>
         </div>
 
         {loading ? (
-          <div className="flex h-48 items-center justify-center text-xs text-[#617565]">
-            Loading threshold configurations...
-          </div>
+          <div className="flex h-32 items-center justify-center text-xs text-[#617565]">Loading thresholds...</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -179,86 +210,119 @@ export default function AlertThresholds() {
                   <th className="py-3 px-3">Parameter</th>
                   <th className="py-3 px-3">Min Value</th>
                   <th className="py-3 px-3">Max Value</th>
-                  <th className="py-3 px-3">Status</th>
-                  <th className="py-3 px-3">Last Updated By</th>
+                  <th className="py-3 px-3">Alert Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f2f6f3]">
                 {thresholds.map((item, idx) => {
-                  const info = PARAMETER_LABELS[item.parameter_name] || {
-                    label: item.parameter_name,
-                    unit: "",
-                  };
-
+                  const info = PARAMETER_LABELS[item.parameter_name] || { label: item.parameter_name, unit: "" };
                   return (
                     <tr key={item.id} className="hover:bg-[#f7faf7]">
                       <td className="py-3.5 px-3 font-semibold text-[#25352a]">
-                        <div>
-                          {info.label}
-                          <span className="ml-1 text-[11px] font-normal text-[#849187]">
-                            ({info.unit})
-                          </span>
-                        </div>
+                        {info.label} <span className="font-normal text-[#849187]">({info.unit})</span>
                       </td>
-
                       <td className="py-3.5 px-3">
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.min_value}
-                            onChange={(e) =>
-                              handleInputChange(idx, "min_value", e.target.value)
-                            }
-                            className="w-24 rounded-lg border border-[#e3ebe4] bg-[#fafcfb] px-2.5 py-1.5 text-xs text-[#1f3022] outline-none transition focus:border-[#347b49] focus:bg-white"
-                          />
-                          <span className="text-[#849187]">{info.unit}</span>
-                        </div>
+                        <input type="number" step="0.01" value={item.min_value} onChange={(e) => handleInputChange(idx, "min_value", e.target.value)} className="w-24 rounded-lg border border-[#e3ebe4] px-2.5 py-1.5 text-xs" />
                       </td>
-
                       <td className="py-3.5 px-3">
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.max_value}
-                            onChange={(e) =>
-                              handleInputChange(idx, "max_value", e.target.value)
-                            }
-                            className="w-24 rounded-lg border border-[#e3ebe4] bg-[#fafcfb] px-2.5 py-1.5 text-xs text-[#1f3022] outline-none transition focus:border-[#347b49] focus:bg-white"
-                          />
-                          <span className="text-[#849187]">{info.unit}</span>
-                        </div>
+                        <input type="number" step="0.01" value={item.max_value} onChange={(e) => handleInputChange(idx, "max_value", e.target.value)} className="w-24 rounded-lg border border-[#e3ebe4] px-2.5 py-1.5 text-xs" />
                       </td>
-
                       <td className="py-3.5 px-3">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleEnable(idx)}
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
-                            item.is_enabled === 1
-                              ? "bg-[#e8f6eb] text-[#28733d]"
-                              : "bg-[#f3f4f6] text-[#6b7280]"
-                          }`}
-                        >
+                        <button onClick={() => handleToggleEnable(idx)} className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${item.is_enabled === 1 ? "bg-[#e8f6eb] text-[#28733d]" : "bg-[#f3f4f6] text-[#6b7280]"}`}>
                           {item.is_enabled === 1 ? "Active" : "Disabled"}
                         </button>
-                      </td>
-
-                      <td className="py-3.5 px-3 text-[#5f7064]">
-                        {item.updated_by_user ? (
-                          <span className="font-medium text-[#28402d]">
-                            {item.updated_by_user}
-                          </span>
-                        ) : (
-                          <span className="text-[#849187] italic">System Default</span>
-                        )}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+      </Card>
+
+      {/* 2. Global View Settings Card (Updated to 3 Primary Module Options) */}
+      <Card className="p-5">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f0ebfa] text-[#7352a8]">
+              <Eye size={17} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-[#28402d]">Global View Settings</h2>
+              <p className="text-[11px] text-[#849187]">Enable or disable sensor modules on the dashboard and history pages for all users.</p>
+            </div>
+          </div>
+          <button
+            onClick={handleSaveViewConfig}
+            disabled={loading || savingView || !viewConfig}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#7352a8] px-4 py-2.5 text-xs font-medium text-white shadow-xs transition hover:bg-[#563c80] disabled:opacity-50"
+          >
+            <Save size={15} />
+            {savingView ? "Saving..." : "Save View Settings"}
+          </button>
+        </div>
+
+        {loading || !viewConfig ? (
+          <div className="flex h-20 items-center justify-center text-xs text-[#617565]">Loading settings...</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+            {/* Option 1: Soil Moisture */}
+            <button
+              type="button"
+              onClick={() => handleToggleModule("soil")}
+              className={`flex items-center justify-between p-4 rounded-xl border text-xs font-medium transition-all ${isSoilActive
+                ? "border-[#7352a8] bg-[#fdfcff] text-[#2b1f40]"
+                : "border-[#e3ebe4] bg-[#fafcfb] text-[#849187]"
+                }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Droplets size={18} className={isSoilActive ? "text-[#7352a8]" : "text-[#849187]"} />
+                <div className="text-left">
+                  <p className="font-semibold text-xs">Soil Moisture</p>
+                  <p className="text-[10px] text-[#849187]">Kelembapan Tanah (%)</p>
+                </div>
+              </div>
+              {isSoilActive ? <Eye size={16} className="text-[#7352a8]" /> : <EyeOff size={16} />}
+            </button>
+
+            {/* Option 2: Climate Sensor Group */}
+            <button
+              type="button"
+              onClick={() => handleToggleModule("climate")}
+              className={`flex items-center justify-between p-4 rounded-xl border text-xs font-medium transition-all ${isClimateActive
+                ? "border-[#7352a8] bg-[#fdfcff] text-[#2b1f40]"
+                : "border-[#e3ebe4] bg-[#fafcfb] text-[#849187]"
+                }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Thermometer size={18} className={isClimateActive ? "text-[#7352a8]" : "text-[#849187]"} />
+                <div className="text-left">
+                  <p className="font-semibold text-xs">Climate Sensor</p>
+                  <p className="text-[10px] text-[#849187]">Temp, Humidity, Pressure</p>
+                </div>
+              </div>
+              {isClimateActive ? <Eye size={16} className="text-[#7352a8]" /> : <EyeOff size={16} />}
+            </button>
+
+            {/* Option 3: NPK Probe Group */}
+            <button
+              type="button"
+              onClick={() => handleToggleModule("npk")}
+              className={`flex items-center justify-between p-4 rounded-xl border text-xs font-medium transition-all ${isNpkActive
+                ? "border-[#7352a8] bg-[#fdfcff] text-[#2b1f40]"
+                : "border-[#e3ebe4] bg-[#fafcfb] text-[#849187]"
+                }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Sprout size={18} className={isNpkActive ? "text-[#7352a8]" : "text-[#849187]"} />
+                <div className="text-left">
+                  <p className="font-semibold text-xs">NPK Probe</p>
+                  <p className="text-[10px] text-[#849187]">Nitrogen, Phosphorus, Potassium</p>
+                </div>
+              </div>
+              {isNpkActive ? <Eye size={16} className="text-[#7352a8]" /> : <EyeOff size={16} />}
+            </button>
           </div>
         )}
       </Card>

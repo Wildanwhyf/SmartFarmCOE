@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 21, 2026 at 06:13 AM
+-- Generation Time: Oct 01, 2026 at 08:30 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -33,15 +33,6 @@ CREATE TABLE `roles` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `roles`
---
-
-INSERT INTO `roles` (`id`, `name`, `created_at`) VALUES
-(1, 'admin', '2026-09-08 13:48:14'),
-(2, 'farmer', '2026-09-08 13:48:14'),
-(3, 'guest', '2026-09-08 13:48:14');
-
 -- --------------------------------------------------------
 
 --
@@ -63,17 +54,17 @@ CREATE TABLE `sensor_readings` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- --------------------------------------------------------
+
 --
--- Dumping data for table `sensor_readings`
+-- Table structure for table `system_settings`
 --
 
-INSERT INTO `sensor_readings` (`id`, `reading_time`, `kelembapan_tanah`, `suhu`, `tekanan`, `humidity`, `nitrogen`, `phosphorus`, `potassium`, `rssi`, `snr`, `created_at`) VALUES
-(1, '2026-09-09 03:14:00', 68.50, 27.30, 1013.25, 68.50, 45.00, 28.00, 110.00, -60, 4.4, '2026-09-08 13:56:10'),
-(2, '2026-09-09 03:14:00', 29.00, 27.30, 1013.25, 68.50, 45.00, 28.00, 110.00, -60, 4.4, '2026-09-08 13:57:46'),
-(3, '2026-09-14 21:36:00', 29.10, 19.50, 905.00, 80.50, 50.00, 30.00, 120.00, -50, 6.0, '2026-09-14 14:43:18'),
-(4, '2026-09-14 21:36:00', NULL, 30.00, 930.00, 85.50, NULL, NULL, NULL, -70, 9.0, '2026-09-17 07:38:38'),
-(5, '2026-09-17 14:54:00', NULL, 35.00, 950.00, 84.00, NULL, NULL, NULL, -75, 7.0, '2026-09-17 07:54:15'),
-(6, '2026-09-17 14:54:00', NULL, 25.00, 950.00, 84.00, NULL, NULL, NULL, -75, 7.0, '2026-09-17 07:54:30');
+CREATE TABLE `system_settings` (
+  `setting_key` varchar(50) NOT NULL,
+  `setting_value` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`setting_value`)),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -91,19 +82,6 @@ CREATE TABLE `threshold_settings` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `threshold_settings`
---
-
-INSERT INTO `threshold_settings` (`id`, `parameter_name`, `min_value`, `max_value`, `is_enabled`, `updated_by`, `updated_at`) VALUES
-(1, 'kelembapan_tanah', 30.00, 80.00, 1, 1, '2026-09-18 03:15:16'),
-(2, 'suhu', 20.00, 32.50, 1, 1, '2026-09-17 07:19:36'),
-(3, 'tekanan', 900.00, 1100.00, 1, 1, '2026-09-17 07:19:36'),
-(4, 'humidity', 30.00, 90.00, 1, 1, '2026-09-17 07:19:36'),
-(5, 'nitrogen', 20.00, 100.00, 1, 1, '2026-09-18 03:15:15'),
-(6, 'phosphorus', 15.00, 80.00, 1, 1, '2026-09-18 03:15:15'),
-(7, 'potassium', 50.00, 200.00, 1, 1, '2026-09-18 03:15:14');
-
 -- --------------------------------------------------------
 
 --
@@ -120,15 +98,6 @@ CREATE TABLE `users` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `users`
---
-
-INSERT INTO `users` (`id`, `role_id`, `username`, `email`, `password_hash`, `is_active`, `created_at`, `updated_at`) VALUES
-(1, 1, 'admin', 'admin@example.com', '$2a$12$S7ph44ANnI6JDaic8r1atusEzS2KQ6k5s.6Jl9NmxVYnMisFnoRpK', 1, '2026-09-12 10:28:45', '2026-09-12 10:35:55'),
-(2, 2, 'farmer', 'farmer@example.com', '$2b$10$8F39uebxtU/.hBQyT7YH.O9rzNidgohSKDj2RAM9VNXPz6uiaG2zW', 1, '2026-09-12 10:43:52', '2026-09-12 10:43:52'),
-(3, 2, 'farmerbudi', 'budi@gmail.com', '$2b$10$PyR05ZsVW2juDv5yA8w0o.Xomb7iHSOMywfPQFvH8mkGtkrJGOztm', 1, '2026-09-14 15:00:35', '2026-09-14 15:00:35');
 
 -- --------------------------------------------------------
 
@@ -151,15 +120,6 @@ CREATE TABLE `warnings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `warnings`
---
-
-INSERT INTO `warnings` (`id`, `sensor_reading_id`, `parameter_name`, `triggered_value`, `threshold_min`, `threshold_max`, `message`, `is_resolved`, `created_at`, `is_acknowledged`, `acknowledged_by`) VALUES
-(1, 3, 'kelembapan', 29.10, 30.00, 80.00, 'kelembapan is too low: 29.1 (min threshold: 30)', 0, '2026-09-14 14:43:18', 1, 1),
-(2, 3, 'suhu', 19.50, 20.00, 32.50, 'suhu is too low: 19.5 (min threshold: 20)', 0, '2026-09-14 14:43:18', 1, 1),
-(3, 5, 'suhu', 35.00, 20.00, 32.50, 'suhu is too high: 35 (max threshold: 32.5)', 0, '2026-09-17 07:54:15', 1, 1);
-
---
 -- Indexes for dumped tables
 --
 
@@ -176,6 +136,12 @@ ALTER TABLE `roles`
 ALTER TABLE `sensor_readings`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_reading_time` (`reading_time`);
+
+--
+-- Indexes for table `system_settings`
+--
+ALTER TABLE `system_settings`
+  ADD PRIMARY KEY (`setting_key`);
 
 --
 -- Indexes for table `threshold_settings`
@@ -217,7 +183,7 @@ ALTER TABLE `roles`
 -- AUTO_INCREMENT for table `sensor_readings`
 --
 ALTER TABLE `sensor_readings`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `threshold_settings`
@@ -235,7 +201,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `warnings`
 --
 ALTER TABLE `warnings`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- Constraints for dumped tables

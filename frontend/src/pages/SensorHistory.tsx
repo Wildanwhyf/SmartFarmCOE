@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Card from "../components/common/Card";
 import SensorHistoryChart from "../components/dashboard/SensorHistoryChart";
 import SensorHistoryTable from "../components/dashboard/SensorHistoryTable";
-import type { ThresholdItem } from "../types/sensor";
+import type { ThresholdItem, GuestCardConfig } from "../types/sensor";
 
 export interface SensorOption {
   label: string;
@@ -65,6 +65,7 @@ export default function SensorHistory() {
   const [selectedWindow, setSelectedWindow] = useState<"24h" | "7d" | "30d">("7d");
   const [readings, setReadings] = useState<FormattedReading[]>([]);
   const [thresholds, setThresholds] = useState<Record<string, ThresholdItem>>({});
+  const [viewConfig, setViewConfig] = useState<GuestCardConfig | null>(null);
   const [windowSummary, setWindowSummary] = useState<WindowSummary | null>(null);
   const [pagination, setPagination] = useState<PaginationMeta>({
     total: 0,
@@ -84,11 +85,12 @@ export default function SensorHistory() {
         ? { Authorization: `Bearer ${token}` }
         : {};
 
-      // Fetch telemetry history, threshold rules, and time-window averages in parallel
-      const [historyRes, threshRes, avgRes] = await Promise.all([
+      // Fetch telemetry history, threshold rules, time-window averages, and global view config in parallel
+      const [historyRes, threshRes, avgRes, viewRes] = await Promise.all([
         fetch(`${baseUrl}/sensor/history?page=${currentPage}&limit=10`, { headers }),
         fetch(`${baseUrl}/thresholds`, { headers }),
         fetch(`${baseUrl}/sensor/averages?window=${windowParam}`, { headers }),
+        fetch(`${baseUrl}/config/guest-cards`, { headers }),
       ]);
 
       if (!historyRes.ok) {
@@ -115,7 +117,7 @@ export default function SensorHistory() {
             year: "numeric",
             timeZone: "Asia/Jakarta",
           }),
-          kelembapan_tanah: parseFloat(item.kelembapan_tanah || item.kelembapan_tanah || "0"),
+          kelembapan_tanah: parseFloat(item.kelembapan_tanah || item.kelembapan || "0"),
           suhu: parseFloat(item.suhu || "0"),
           tekanan: parseFloat(item.tekanan || "0"),
           humidity: parseFloat(item.humidity || "0"),
@@ -143,6 +145,12 @@ export default function SensorHistory() {
         setThresholds(threshMap);
       }
 
+      // Map global view config
+      if (viewRes.ok) {
+        const viewResult = await viewRes.json();
+        setViewConfig(viewResult.data);
+      }
+
       // Map window averages
       if (avgRes.ok) {
         const avgResult = await avgRes.json();
@@ -167,13 +175,24 @@ export default function SensorHistory() {
     return () => clearInterval(interval);
   }, [fetchHistoryData, page, selectedWindow]);
 
-  // Filter available options based on active threshold settings from API
+  // Filter available options based on thresholds AND Global View Settings
   const activeSensorOptions = useMemo(() => {
     return sensorOptions.filter((option) => {
-      if (option.value === "rssi" || option.value === "snr") return true;
-      return thresholds[option.value]?.is_enabled !== 0;
+      if (option.value === "rssi" || option.value === "snr") return true; // LoRa always visible
+
+      // 1. Check Global Thresholds (Map kelembapan_tanah -> kelembapan)
+      const thresholdKey = option.value === "kelembapan_tanah" ? "kelembapan" : option.value;
+      const isThresholdEnabled = thresholds[thresholdKey]?.is_enabled !== 0;
+
+      // 2. Check Global View Config
+      let isViewEnabled = true;
+      if (viewConfig) {
+        isViewEnabled = viewConfig[option.value as keyof GuestCardConfig] !== false;
+      }
+
+      return isThresholdEnabled && isViewEnabled;
     });
-  }, [thresholds]);
+  }, [thresholds, viewConfig]);
 
   // Auto-fallback if the currently selected sensor becomes disabled
   useEffect(() => {
@@ -283,8 +302,8 @@ export default function SensorHistory() {
                     type="button"
                     onClick={() => setSelectedSensor(sensor)}
                     className={`rounded-lg px-3 py-2 text-xs font-medium transition ${isSelected
-                        ? "bg-[#347b49] text-white shadow-sm"
-                        : "bg-[#f2f6f3] text-[#5f7064] hover:bg-[#e7eee9]"
+                      ? "bg-[#347b49] text-white shadow-sm"
+                      : "bg-[#f2f6f3] text-[#5f7064] hover:bg-[#e7eee9]"
                       }`}
                   >
                     {sensor.label}
@@ -346,8 +365,8 @@ export default function SensorHistory() {
                   type="button"
                   onClick={() => setSelectedWindow(win)}
                   className={`rounded-md px-2.5 py-1 font-semibold transition ${selectedWindow === win
-                      ? "bg-[#347b49] text-white shadow-2xs"
-                      : "text-[#5f7064] hover:text-[#152619]"
+                    ? "bg-[#347b49] text-white shadow-2xs"
+                    : "text-[#5f7064] hover:text-[#152619]"
                     }`}
                 >
                   {win.toUpperCase()}

@@ -4,6 +4,7 @@ const cors = require ('cors');
 const sensorRoutes = require('./routes/sensor');
 const authRoutes = require('./routes/auth');
 const thresholdRoutes = require('./routes/threshold');
+const configRoutes = require('./routes/config');
 
 dotenv.config();
 
@@ -22,6 +23,8 @@ app.use('/api/sensor', sensorRoutes );
 app.use('/api/auth', authRoutes);
 
 app.use('/api/thresholds', thresholdRoutes);
+
+app.use('/api/config', configRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

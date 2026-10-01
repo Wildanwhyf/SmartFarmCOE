@@ -4,12 +4,13 @@ import TemperatureHumidityCard from "../components/dashboard/TemperatureHumidity
 import NpkCard from "../components/dashboard/NpkCard";
 import LoraSignalCard from "../components/dashboard/LoraSignalCard";
 import AlertsCard from "../components/dashboard/AlertsCard";
-import type { LiveSensorApiResponse, ThresholdItem } from "../types/sensor";
+import type { LiveSensorApiResponse, ThresholdItem, GuestCardConfig } from "../types/sensor";
 import WeatherCard from "../components/dashboard/WeatherCard";
 
 export default function Dashboard() {
   const [liveData, setLiveData] = useState<LiveSensorApiResponse["data"] | null>(null);
   const [thresholds, setThresholds] = useState<Record<string, ThresholdItem>>({});
+  const [guestConfig, setGuestConfig] = useState<GuestCardConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>("--.--.--");
@@ -21,10 +22,11 @@ export default function Dashboard() {
 
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
-      // Fetch live sensor data and thresholds in parallel
-      const [liveRes, threshRes] = await Promise.all([
+      // Fetch live sensor data, thresholds, and guest config in parallel
+      const [liveRes, threshRes, guestRes] = await Promise.all([
         fetch(`${baseUrl}/sensor/live`, { headers }),
         fetch(`${baseUrl}/thresholds`, { headers }),
+        fetch(`${baseUrl}/config/guest-cards`, { headers }),
       ]);
 
       if (!liveRes.ok) {
@@ -46,6 +48,11 @@ export default function Dashboard() {
           threshMap[item.parameter_name] = item;
         });
         setThresholds(threshMap);
+      }
+
+      if (guestRes.ok) {
+        const guestResult = await guestRes.json();
+        setGuestConfig(guestResult.data);
       }
 
       setError(null);
@@ -72,7 +79,21 @@ export default function Dashboard() {
   const potassium = liveData ? parseFloat(liveData.potassium) : 0;
   const rssi = liveData ? liveData.rssi : 0;
   const snr = liveData ? parseFloat(liveData.snr) : 0;
-  const isEnabled = (paramName: string) => thresholds[paramName]?.is_enabled !== 0;
+
+  // Smart Visibility Logic
+  const isEnabled = (paramName: string) => {
+    // 1. GLOBAL THRESHOLD CHECK: If globally disabled by admin in thresholds, hide it
+    if (thresholds[paramName] && thresholds[paramName].is_enabled === 0) return false;
+
+    // 2. GLOBAL VIEW CHECK: Apply visibility rules to EVERYONE
+    if (guestConfig) {
+      // Map API parameter names to config keys (kelembapan -> kelembapan_tanah)
+      const configKey = paramName === "kelembapan" ? "kelembapan_tanah" : paramName;
+      if (guestConfig[configKey as keyof GuestCardConfig] === false) return false;
+    }
+
+    return true;
+  };
 
   return (
     <div className="px-8 py-7">
@@ -105,6 +126,7 @@ export default function Dashboard() {
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <WeatherCard />
+
           {/* Soil Moisture (checks kelembapan_tanah directly) */}
           {isEnabled("kelembapan_tanah") && (
             <SoilMoistureCard

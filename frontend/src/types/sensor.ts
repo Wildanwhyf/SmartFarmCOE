@@ -59,3 +59,18 @@ export interface WarningsApiResponse {
     };
   };
 }
+
+export interface GuestCardConfig {
+  suhu: boolean;
+  tekanan: boolean;
+  humidity: boolean;
+  kelembapan_tanah: boolean;
+  nitrogen: boolean;
+  phosphorus: boolean;
+  potassium: boolean;
+}
+
+export interface GuestConfigApiResponse {
+  message: string;
+  data: GuestCardConfig;
+}

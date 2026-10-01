@@ -9,9 +9,10 @@ interface NpkCardProps {
   nThreshold?: ThresholdItem;
   pThreshold?: ThresholdItem;
   kThreshold?: ThresholdItem;
+  viewConfig?: any; 
 }
 
-function NpkCard({
+export default function NpkCard({
   nitrogen,
   phosphorus,
   potassium,
@@ -19,7 +20,7 @@ function NpkCard({
   pThreshold,
   kThreshold,
 }: NpkCardProps) {
-  // Check individual activation status
+  // Check individual activation status per nutrient
   const isNEnabled = nThreshold?.is_enabled !== 0;
   const isPEnabled = pThreshold?.is_enabled !== 0;
   const isKEnabled = kThreshold?.is_enabled !== 0;
@@ -112,5 +113,3 @@ function NpkCard({
     </Card>
   );
 }
-
-export default NpkCard;
