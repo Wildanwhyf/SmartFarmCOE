@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Oct 01, 2026 at 09:29 AM
+-- Generation Time: Oct 01, 2026 at 09:49 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -33,6 +33,15 @@ CREATE TABLE `roles` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `roles`
+--
+
+INSERT INTO `roles` (`id`, `name`, `created_at`) VALUES
+(1, 'admin', '2026-09-08 13:48:14'),
+(2, 'farmer', '2026-09-08 13:48:14'),
+(3, 'guest', '2026-09-08 13:48:14');
+
 -- --------------------------------------------------------
 
 --
@@ -53,7 +62,6 @@ CREATE TABLE `sensor_readings` (
   `snr` decimal(4,1) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
 -- --------------------------------------------------------
 
 --
@@ -65,6 +73,13 @@ CREATE TABLE `system_settings` (
   `setting_value` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`setting_value`)),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `system_settings`
+--
+
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `updated_at`) VALUES
+('guest_card_visibility', '{\"suhu\":true,\"tekanan\":true,\"humidity\":true,\"kelembapan_tanah\":false,\"nitrogen\":false,\"phosphorus\":false,\"potassium\":false}', '2026-10-01 06:23:36');
 
 -- --------------------------------------------------------
 
@@ -81,6 +96,19 @@ CREATE TABLE `threshold_settings` (
   `updated_by` int(11) DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `threshold_settings`
+--
+
+INSERT INTO `threshold_settings` (`id`, `parameter_name`, `min_value`, `max_value`, `is_enabled`, `updated_by`, `updated_at`) VALUES
+(1, 'kelembapan_tanah', 20.00, 80.00, 1, 1, '2026-10-01 06:20:53'),
+(2, 'suhu', 20.00, 32.50, 1, 1, '2026-09-17 07:19:36'),
+(3, 'tekanan', 900.00, 1100.00, 1, 1, '2026-09-17 07:19:36'),
+(4, 'humidity', 30.00, 90.00, 1, 1, '2026-09-17 07:19:36'),
+(5, 'nitrogen', 20.00, 100.00, 1, 1, '2026-09-30 13:04:56'),
+(6, 'phosphorus', 15.00, 80.00, 1, 1, '2026-09-30 13:04:56'),
+(7, 'potassium', 50.00, 200.00, 1, 1, '2026-09-30 13:04:56');
 
 -- --------------------------------------------------------
 
