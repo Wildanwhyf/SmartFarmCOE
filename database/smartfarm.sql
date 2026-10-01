@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Oct 01, 2026 at 08:30 AM
+-- Generation Time: Oct 01, 2026 at 09:29 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -98,6 +98,15 @@ CREATE TABLE `users` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `users`
+--
+
+INSERT INTO `users` (`id`, `role_id`, `username`, `email`, `password_hash`, `is_active`, `created_at`, `updated_at`) VALUES
+(1, 1, 'admin', 'admin@example.com', '$2a$12$S7ph44ANnI6JDaic8r1atusEzS2KQ6k5s.6Jl9NmxVYnMisFnoRpK', 1, '2026-09-12 10:28:45', '2026-09-12 10:35:55'),
+(2, 2, 'farmer', 'farmer@example.com', '$2b$10$8F39uebxtU/.hBQyT7YH.O9rzNidgohSKDj2RAM9VNXPz6uiaG2zW', 1, '2026-09-12 10:43:52', '2026-09-12 10:43:52'),
+(3, 2, 'farmerbudi', 'budi@gmail.com', '$2b$10$PyR05ZsVW2juDv5yA8w0o.Xomb7iHSOMywfPQFvH8mkGtkrJGOztm', 1, '2026-09-14 15:00:35', '2026-09-14 15:00:35');
 
 -- --------------------------------------------------------
 
