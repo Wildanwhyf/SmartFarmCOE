@@ -178,16 +178,16 @@ export default function SensorHistory() {
   // Filter available options based on thresholds AND Global View Settings
   const activeSensorOptions = useMemo(() => {
     return sensorOptions.filter((option) => {
-      if (option.value === "rssi" || option.value === "snr") return true; // LoRa always visible
-
-      // 1. Check Global Thresholds (Map kelembapan_tanah -> kelembapan)
-      const thresholdKey = option.value === "kelembapan_tanah" ? "kelembapan" : option.value;
-      const isThresholdEnabled = thresholds[thresholdKey]?.is_enabled !== 0;
+      // 1. Check Global Thresholds (LoRa doesn't have thresholds, so default to true if undefined)
+      const thresholdKey = option.value === "kelembapan_tanah" ? "kelembapan_tanah" : option.value;
+      const isThresholdEnabled = thresholds[thresholdKey] ? thresholds[thresholdKey].is_enabled !== 0 : true;
 
       // 2. Check Global View Config
       let isViewEnabled = true;
       if (viewConfig) {
-        isViewEnabled = viewConfig[option.value as keyof GuestCardConfig] !== false;
+        // Map UI names to config names
+        const configKey = option.value === "kelembapan_tanah" ? "kelembapan_tanah" : option.value;
+        isViewEnabled = viewConfig[configKey as keyof GuestCardConfig] !== false;
       }
 
       return isThresholdEnabled && isViewEnabled;
@@ -253,9 +253,9 @@ export default function SensorHistory() {
   }, [windowSummary, selectedSensor]);
 
   return (
-    <div className="px-8 py-7">
-      {/* Page header */}
-      <div className="flex items-start justify-between">
+    <div className="px-4 py-5 lg:px-8 lg:py-7">
+      {/* Page header - Stack vertically on small screens, row on medium+ */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[#152619]">
             Sensor History
@@ -265,7 +265,7 @@ export default function SensorHistory() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-[#28733d] bg-[#e8f6eb] px-3 py-1.5 rounded-full font-medium">
+        <div className="inline-flex w-fit items-center gap-2 text-xs text-[#28733d] bg-[#e8f6eb] px-3 py-1.5 rounded-full font-medium">
           <span className="h-2 w-2 rounded-full bg-[#43c878] animate-pulse" />
           Live Polling Active (10s)
         </div>
@@ -278,9 +278,9 @@ export default function SensorHistory() {
       )}
 
       {/* Main Container */}
-      <Card className="mt-6 p-5">
-        {/* Chart header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <Card className="mt-6 p-4 sm:p-5">
+        {/* Chart header & Filters */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h2 className="text-sm font-semibold text-[#28402d]">
               {selectedSensor.label}
@@ -291,7 +291,7 @@ export default function SensorHistory() {
           </div>
 
           {/* Dynamic Sensor selector */}
-          <div>
+          <div className="w-full lg:w-auto">
             <div className="flex flex-wrap gap-2">
               {activeSensorOptions.map((sensor) => {
                 const isSelected = selectedSensor.value === sensor.value;
@@ -302,8 +302,8 @@ export default function SensorHistory() {
                     type="button"
                     onClick={() => setSelectedSensor(sensor)}
                     className={`rounded-lg px-3 py-2 text-xs font-medium transition ${isSelected
-                      ? "bg-[#347b49] text-white shadow-sm"
-                      : "bg-[#f2f6f3] text-[#5f7064] hover:bg-[#e7eee9]"
+                        ? "bg-[#347b49] text-white shadow-sm"
+                        : "bg-[#f2f6f3] text-[#5f7064] hover:bg-[#e7eee9]"
                       }`}
                   >
                     {sensor.label}
@@ -325,7 +325,7 @@ export default function SensorHistory() {
         </div>
 
         {/* Chart Component */}
-        <div className="mt-4">
+        <div className="mt-4 overflow-hidden">
           {loading && readings.length === 0 ? (
             <div className="flex h-64 items-center justify-center text-xs text-[#617565]">
               Loading telemetry graph...
@@ -352,21 +352,21 @@ export default function SensorHistory() {
 
         {/* Summary Stats Header & Time-Window Filter */}
         <div className="mt-5 border-t border-[#edf1ed] pt-5">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
             <span className="text-xs font-semibold text-[#28402d]">
               Statistical Aggregates
             </span>
 
             {/* Time Window Selector Buttons */}
-            <div className="flex items-center gap-1 rounded-lg bg-[#f2f6f3] p-1 text-[11px]">
+            <div className="flex items-center w-fit gap-1 rounded-lg bg-[#f2f6f3] p-1 text-[11px]">
               {(["24h", "7d", "30d"] as const).map((win) => (
                 <button
                   key={win}
                   type="button"
                   onClick={() => setSelectedWindow(win)}
                   className={`rounded-md px-2.5 py-1 font-semibold transition ${selectedWindow === win
-                    ? "bg-[#347b49] text-white shadow-2xs"
-                    : "text-[#5f7064] hover:text-[#152619]"
+                      ? "bg-[#347b49] text-white shadow-2xs"
+                      : "text-[#5f7064] hover:text-[#152619]"
                     }`}
                 >
                   {win.toUpperCase()}
@@ -375,7 +375,7 @@ export default function SensorHistory() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 sm:gap-3 sm:grid-cols-5">
             <div>
               <p className="text-[11px] text-[#849187]">Min (Page)</p>
               <p className="mt-1 text-sm font-semibold text-[#3b5141]">

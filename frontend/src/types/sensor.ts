@@ -12,6 +12,11 @@ export interface LiveSensorApiResponse {
     potassium: string;
     rssi: number;
     snr: string;
+    status: string;
+    frequency: string;
+    spreading_factor: string;
+    bandwidth: string;
+    last_activity: string;
     created_at: string;
   };
 }
@@ -68,6 +73,13 @@ export interface GuestCardConfig {
   nitrogen: boolean;
   phosphorus: boolean;
   potassium: boolean;
+  rssi: boolean;
+  snr: boolean;
+  status: boolean;
+  frequency: boolean;
+  spreading_factor: boolean;
+  bandwidth: boolean;
+  last_activity: boolean;
 }
 
 export interface GuestConfigApiResponse {

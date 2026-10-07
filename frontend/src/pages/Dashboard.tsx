@@ -3,6 +3,7 @@ import SoilMoistureCard from "../components/dashboard/SoilMoistureCard";
 import TemperatureHumidityCard from "../components/dashboard/TemperatureHumidityCard";
 import NpkCard from "../components/dashboard/NpkCard";
 import LoraSignalCard from "../components/dashboard/LoraSignalCard";
+import LoraConfigCard from "../components/dashboard/LoraConfigCard";
 import AlertsCard from "../components/dashboard/AlertsCard";
 import type { LiveSensorApiResponse, ThresholdItem, GuestCardConfig } from "../types/sensor";
 import WeatherCard from "../components/dashboard/WeatherCard";
@@ -19,19 +20,15 @@ export default function Dashboard() {
     try {
       const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
       const token = localStorage.getItem("token");
-
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
-      // Fetch live sensor data, thresholds, and guest config in parallel
       const [liveRes, threshRes, guestRes] = await Promise.all([
         fetch(`${baseUrl}/sensor/live`, { headers }),
         fetch(`${baseUrl}/thresholds`, { headers }),
         fetch(`${baseUrl}/config/guest-cards`, { headers }),
       ]);
 
-      if (!liveRes.ok) {
-        throw new Error("Failed to fetch live sensor reading");
-      }
+      if (!liveRes.ok) throw new Error("Failed to fetch live sensor reading");
 
       const liveResult: LiveSensorApiResponse = await liveRes.json();
       if (liveResult.data) {
@@ -77,40 +74,42 @@ export default function Dashboard() {
   const nitrogen = liveData ? parseFloat(liveData.nitrogen) : 0;
   const phosphorus = liveData ? parseFloat(liveData.phosphorus) : 0;
   const potassium = liveData ? parseFloat(liveData.potassium) : 0;
+  
   const rssi = liveData ? liveData.rssi : 0;
   const snr = liveData ? parseFloat(liveData.snr) : 0;
+  const status = liveData?.status || "--";
+  const frequency = liveData?.frequency || "--";
+  const spreadingFactor = liveData?.spreading_factor || "--";
+  const bandwidth = liveData?.bandwidth || "--";
+  const lastActivity = liveData?.last_activity || "--";
 
-  // Smart Visibility Logic
-  const isEnabled = (paramName: string) => {
-    // 1. GLOBAL THRESHOLD CHECK: If globally disabled by admin in thresholds, hide it
-    if (thresholds[paramName] && thresholds[paramName].is_enabled === 0) return false;
-
-    // 2. GLOBAL VIEW CHECK: Apply visibility rules to EVERYONE
-    if (guestConfig) {
-      // Map API parameter names to config keys (kelembapan -> kelembapan_tanah)
-      const configKey = paramName === "kelembapan" ? "kelembapan_tanah" : paramName;
-      if (guestConfig[configKey as keyof GuestCardConfig] === false) return false;
-    }
-
-    return true;
+  const isModuleActive = (params: string[]) => {
+    return params.some((param) => {
+      const isThreshOn = thresholds[param] ? thresholds[param].is_enabled !== 0 : true;
+      let isViewOn = true;
+      if (guestConfig) {
+        const configKey = param === "kelembapan" ? "kelembapan_tanah" : param;
+        isViewOn = guestConfig[configKey as keyof GuestCardConfig] !== false;
+      }
+      return isThreshOn && isViewOn;
+    });
   };
 
+  const showSoilCard = isModuleActive(["kelembapan_tanah"]);
+  const showClimateCard = isModuleActive(["suhu", "humidity", "tekanan"]);
+  const showNpkCard = isModuleActive(["nitrogen", "phosphorus", "potassium"]);
+  const showLoraSignalCard = isModuleActive(["rssi", "snr"]);
+  const showLoraConfigCard = isModuleActive(["status", "frequency", "spreading_factor", "bandwidth", "last_activity"]);
+
   return (
-    <div className="px-8 py-7">
-      {/* Header */}
+    <div className="px-4 py-5 lg:px-8 lg:py-7">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[#152619]">
-            Live Monitoring
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-[#152619]">Live Monitoring</h1>
           <p className="mt-1 text-sm text-[#617565]">
-            Last update:{" "}
-            <span className="font-mono text-[#23753d]">
-              {lastUpdatedTime}
-            </span>
+            Last update: <span className="font-mono text-[#23753d]">{lastUpdatedTime}</span>
           </p>
         </div>
-
         {error && (
           <span className="rounded-full bg-[#fde8e8] px-3 py-1 text-xs font-semibold text-[#e02424]">
             {error}
@@ -118,7 +117,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Sensor cards */}
       {loading && !liveData ? (
         <div className="mt-6 flex h-64 items-center justify-center rounded-2xl border border-[#e3ebe4] bg-white">
           <p className="text-sm font-medium text-[#617565]">Fetching latest sensor metrics...</p>
@@ -127,16 +125,11 @@ export default function Dashboard() {
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <WeatherCard />
 
-          {/* Soil Moisture (checks kelembapan_tanah directly) */}
-          {isEnabled("kelembapan_tanah") && (
-            <SoilMoistureCard
-              moisture={soilMoisture}
-              threshold={thresholds.kelembapan_tanah}
-            />
+          {showSoilCard && (
+            <SoilMoistureCard moisture={soilMoisture} threshold={thresholds.kelembapan_tanah} />
           )}
 
-          {/* Temperature & Humidity */}
-          {(isEnabled("suhu") || isEnabled("humidity") || isEnabled("tekanan")) && (
+          {showClimateCard && (
             <TemperatureHumidityCard
               temperature={temperature}
               humidity={humidity}
@@ -147,8 +140,7 @@ export default function Dashboard() {
             />
           )}
 
-          {/* NPK Card (renders if at least 1 nutrient is enabled) */}
-          {(isEnabled("nitrogen") || isEnabled("phosphorus") || isEnabled("potassium")) && (
+          {showNpkCard && (
             <NpkCard
               nitrogen={nitrogen}
               phosphorus={phosphorus}
@@ -159,7 +151,20 @@ export default function Dashboard() {
             />
           )}
 
-          <LoraSignalCard rssi={rssi} snr={snr} />
+          {showLoraSignalCard && (
+            <LoraSignalCard rssi={rssi} snr={snr} viewConfig={guestConfig} />
+          )}
+
+          {showLoraConfigCard && (
+            <LoraConfigCard 
+              status={status}
+              frequency={frequency}
+              spreadingFactor={spreadingFactor}
+              bandwidth={bandwidth}
+              lastActivity={lastActivity}
+              viewConfig={guestConfig}
+            />
+          )}
 
           <AlertsCard />
         </div>

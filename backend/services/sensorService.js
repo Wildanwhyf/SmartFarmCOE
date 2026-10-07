@@ -5,7 +5,6 @@ class SensorService {
    * Process and store incoming sensor reading, then auto-generate warning alerts.
    */
   async saveReading(payload) {
-    // 1. Destructure directly from payload (NOT req.body)
     const {
       time,
       suhu,
@@ -16,7 +15,12 @@ class SensorService {
       phosphorus = null,
       potassium = null,
       rssi = null,
-      snr = null
+      snr = null,
+      status = null,
+      frequency = null,
+      spreading_factor = null,
+      bandwidth = null,
+      last_activity = null
     } = payload;
 
     const connection = await db.getConnection();
@@ -24,14 +28,12 @@ class SensorService {
     try {
       await connection.beginTransaction();
 
-      // 2. Insert sensor telemetry (Fixed column name: kelembapan_tanah)
       const insertQuery = `
         INSERT INTO sensor_readings 
-        (reading_time, kelembapan_tanah, suhu, tekanan, humidity, nitrogen, phosphorus, potassium, rssi, snr)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (reading_time, kelembapan_tanah, suhu, tekanan, humidity, nitrogen, phosphorus, potassium, rssi, snr, status, frequency, spreading_factor, bandwidth, last_activity)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
-      // Helper function to convert numeric inputs safely without NaN
       const parseNum = (val) => (val !== null && val !== undefined && val !== '' ? parseFloat(val) : null);
       const parseIntNum = (val) => (val !== null && val !== undefined && val !== '' ? parseInt(val, 10) : null);
 
@@ -45,18 +47,21 @@ class SensorService {
         parseNum(phosphorus),
         parseNum(potassium),
         parseIntNum(rssi),
-        parseNum(snr)
+        parseNum(snr),
+        status,
+        frequency,
+        spreading_factor,
+        bandwidth,
+        last_activity
       ];
 
       const [result] = await connection.execute(insertQuery, values);
       const readingId = result.insertId;
 
-      // 3. Fetch enabled threshold settings
       const [thresholds] = await connection.execute(
         'SELECT parameter_name, min_value, max_value FROM threshold_settings WHERE is_enabled = 1'
       );
 
-      // 4. Map values for threshold checking
       const parsedData = {
         kelembapan_tanah: parseNum(kelembapan_tanah),
         suhu: parseNum(suhu),
@@ -71,7 +76,7 @@ class SensorService {
 
       for (const t of thresholds) {
         const val = parsedData[t.parameter_name];
-        // Skip if the sensor did not send this value or if it's null/NaN
+
         if (val === null || val === undefined || isNaN(val)) continue;
 
         const min = t.min_value !== null ? parseFloat(t.min_value) : null;
@@ -89,7 +94,6 @@ class SensorService {
         }
       }
 
-      // 5. Bulk insert triggered warnings
       if (warningsToInsert.length > 0) {
         const warningQuery = `
           INSERT INTO warnings 
