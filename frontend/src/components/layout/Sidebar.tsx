@@ -71,17 +71,16 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       {/* Mobile Overlay Backdrop */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-[#152619]/60 backdrop-blur-sm lg:hidden transition-opacity"
           onClick={onClose}
         />
       )}
 
       {/* Sidebar Container */}
-      <aside 
-        className={`fixed left-0 top-0 z-50 flex h-screen w-[226px] flex-col bg-[#2d703b] text-white transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+      <aside
+        className={`fixed left-0 top-0 z-50 flex h-[100dvh] w-[226px] flex-col bg-[#2d703b] text-white transition-transform duration-300 ease-in-out lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         {/* Logo & Mobile Close Button */}
         <div className="flex h-[53px] lg:h-[69px] items-center justify-between border-b border-white/10 px-5">
@@ -94,7 +93,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
             </span>
           </div>
 
-          <button 
+          <button
             onClick={onClose}
             className="lg:hidden rounded-lg p-1 text-white/80 hover:bg-white/10 hover:text-white"
           >
@@ -121,11 +120,10 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
 
           {!loading && (
             <span
-              className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                isLoggedIn
-                  ? "bg-[#4caf50] text-white"
-                  : "bg-[#e5b91d] text-[#604e00]"
-              }`}
+              className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${isLoggedIn
+                ? "bg-[#4caf50] text-white"
+                : "bg-[#e5b91d] text-[#604e00]"
+                }`}
             >
               {currentRole}
             </span>
@@ -142,11 +140,10 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
               <a
                 key={item.name}
                 href={item.path}
-                className={`mb-1 flex h-[38px] items-center rounded-xl px-3 text-sm transition ${
-                  isActive
-                    ? "bg-[#4caf50] font-semibold text-white"
-                    : "text-white/80 hover:bg-white/10 hover:text-white"
-                }`}
+                className={`mb-1 flex h-[38px] items-center rounded-xl px-3 text-sm transition ${isActive
+                  ? "bg-[#4caf50] font-semibold text-white"
+                  : "text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
               >
                 <Icon size={17} strokeWidth={1.8} />
                 <span className="ml-3 truncate">{item.name}</span>
@@ -156,7 +153,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
         </nav>
 
         {/* Bottom Actions */}
-        <div className="border-t border-white/10 px-3 py-4">
+        <div className="border-t border-white/10 px-3 pt-4 pb-10 lg:pb-4">
           {isLoggedIn ? (
             <button
               onClick={() => {
