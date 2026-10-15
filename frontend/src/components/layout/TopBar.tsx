@@ -26,9 +26,22 @@ function TopBar() {
         <span className="text-[#6d8372]">{roleDisplay}</span>
       </p>
 
-      <div className="flex items-center gap-2 text-[12px] text-[#3d7650]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#3fcf7b]" />
-        Live
+      {/* Right side: Logo & Live Indicator */}
+      <div className="flex items-center gap-8">
+        
+        {/* University Logo (Increased size to h-10) */}
+        <img 
+          src="/LogoUniv.png" 
+          alt="University Logo" 
+          className="h-8 w-auto object-contain" 
+        />
+
+        {/* Live Indicator */}
+        <div className="flex items-center gap-2 text-[12px] text-[#3d7650]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#3fcf7b]" />
+          Live
+        </div>
+        
       </div>
     </header>
   );

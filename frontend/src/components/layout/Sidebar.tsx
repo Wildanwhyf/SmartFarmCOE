@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import LoginModal from "../common/LoginModal";
 import { useAuth } from "../../context/AuthContext";
+import { Link, useLocation } from "react-router-dom";
 
 const menuItems = [
   {
@@ -54,6 +55,7 @@ interface SidebarProps {
 function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, loading, logout } = useAuth();
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const location = useLocation();
 
   const currentRole = user?.role || "guest";
   const isLoggedIn = !!user;
@@ -134,20 +136,21 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           {visibleMenuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = window.location.pathname === item.path;
+            const isActive = location.pathname === item.path;
 
             return (
-              <a
+              <Link
                 key={item.name}
-                href={item.path}
+                to={item.path}
+                onClick={onClose}
                 className={`mb-1 flex h-[38px] items-center rounded-xl px-3 text-sm transition ${isActive
-                  ? "bg-[#4caf50] font-semibold text-white"
-                  : "text-white/80 hover:bg-white/10 hover:text-white"
+                    ? "bg-[#4caf50] font-semibold text-white"
+                    : "text-white/80 hover:bg-white/10 hover:text-white"
                   }`}
               >
                 <Icon size={17} strokeWidth={1.8} />
                 <span className="ml-3 truncate">{item.name}</span>
-              </a>
+              </Link>
             );
           })}
         </nav>
