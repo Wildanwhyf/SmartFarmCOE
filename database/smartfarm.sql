@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Oct 07, 2026 at 04:03 AM
+-- Generation Time: Oct 20, 2026 at 08:55 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -65,7 +65,11 @@ CREATE TABLE `sensor_readings` (
   `frequency` varchar(50) DEFAULT NULL,
   `spreading_factor` varchar(20) DEFAULT NULL,
   `bandwidth` varchar(50) DEFAULT NULL,
-  `last_activity` varchar(50) DEFAULT NULL
+  `last_activity` varchar(50) DEFAULT NULL,
+  `throughput` decimal(10,2) DEFAULT NULL,
+  `delay` int(11) DEFAULT NULL COMMENT 'Calculated in milliseconds',
+  `packet_loss` decimal(5,2) DEFAULT NULL COMMENT 'Percentage',
+  `jitter` decimal(10,2) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -85,7 +89,7 @@ CREATE TABLE `system_settings` (
 --
 
 INSERT INTO `system_settings` (`setting_key`, `setting_value`, `updated_at`) VALUES
-('guest_card_visibility', '{\"suhu\":true,\"tekanan\":true,\"humidity\":true,\"kelembapan_tanah\":false,\"nitrogen\":false,\"phosphorus\":false,\"potassium\":false,\"rssi\":false,\"snr\":false,\"status\":true,\"frequency\":true,\"spreading_factor\":true,\"bandwidth\":true,\"last_activity\":true}', '2026-10-07 01:59:06');
+('guest_card_visibility', '{\"suhu\":true,\"tekanan\":true,\"humidity\":true,\"kelembapan_tanah\":false,\"nitrogen\":false,\"phosphorus\":false,\"potassium\":false,\"rssi\":false,\"snr\":false,\"status\":true,\"frequency\":true,\"spreading_factor\":true,\"bandwidth\":true,\"last_activity\":true,\"throughput\":false,\"delay\":true,\"packet_loss\":true,\"jitter\":false}', '2026-10-20 04:08:23');
 
 -- --------------------------------------------------------
 
@@ -163,18 +167,6 @@ CREATE TABLE `warnings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `warnings`
---
-
-INSERT INTO `warnings` (`id`, `sensor_reading_id`, `parameter_name`, `triggered_value`, `threshold_min`, `threshold_max`, `message`, `is_resolved`, `created_at`, `is_acknowledged`, `acknowledged_by`) VALUES
-(1, 3, 'kelembapan', 29.10, 30.00, 80.00, 'kelembapan is too low: 29.1 (min threshold: 30)', 0, '2026-09-14 14:43:18', 1, 1),
-(2, 3, 'suhu', 19.50, 20.00, 32.50, 'suhu is too low: 19.5 (min threshold: 20)', 0, '2026-09-14 14:43:18', 1, 1),
-(3, 5, 'suhu', 35.00, 20.00, 32.50, 'suhu is too high: 35 (max threshold: 32.5)', 0, '2026-09-17 07:54:15', 1, 1),
-(4, 8, 'suhu', 19.00, 20.00, 32.50, 'suhu is too low: 19 (min threshold: 20)', 0, '2026-09-30 13:21:58', 1, 1),
-(5, 10, 'suhu', 15.00, 20.00, 32.50, 'suhu is too low: 15 (min threshold: 20)', 0, '2026-10-01 06:22:33', 1, 1),
-(6, 12, 'suhu', 10.00, 20.00, 32.50, 'suhu is too low: 10 (min threshold: 20)', 0, '2026-10-01 06:27:09', 1, 1);
-
---
 -- Indexes for dumped tables
 --
 
@@ -238,7 +230,7 @@ ALTER TABLE `roles`
 -- AUTO_INCREMENT for table `sensor_readings`
 --
 ALTER TABLE `sensor_readings`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
 
 --
 -- AUTO_INCREMENT for table `threshold_settings`
@@ -256,7 +248,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `warnings`
 --
 ALTER TABLE `warnings`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- Constraints for dumped tables

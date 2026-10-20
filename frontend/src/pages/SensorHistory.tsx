@@ -58,11 +58,19 @@ interface WindowSummary {
   window_end?: string;
 }
 
+// 1. Defined available window options
+type WindowFilter = "all" | "24h" | "7d" | "30d" | "custom";
+
 export default function SensorHistory() {
   const [selectedSensor, setSelectedSensor] = useState<SensorOption>(
     sensorOptions[0]
   );
-  const [selectedWindow, setSelectedWindow] = useState<"24h" | "7d" | "30d">("7d");
+  
+  // 2. Added new states for advanced filtering
+  const [selectedWindow, setSelectedWindow] = useState<WindowFilter>("7d");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+
   const [readings, setReadings] = useState<FormattedReading[]>([]);
   const [thresholds, setThresholds] = useState<Record<string, ThresholdItem>>({});
   const [viewConfig, setViewConfig] = useState<GuestCardConfig | null>(null);
@@ -77,30 +85,40 @@ export default function SensorHistory() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchHistoryData = useCallback(async (currentPage: number, windowParam: string) => {
+  // 3. Updated fetch function to handle custom dates and 'all'
+  const fetchHistoryData = useCallback(async (currentPage: number, windowParam: WindowFilter, start: string, end: string) => {
     try {
       const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
       const token = localStorage.getItem("token");
-      const headers: HeadersInit = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
-      // Fetch telemetry history, threshold rules, time-window averages, and global view config in parallel
+      // Dynamically build History URL and Averages URL
+      let historyUrl = `${baseUrl}/sensor/history?page=${currentPage}&limit=10`;
+      let avgUrl = `${baseUrl}/sensor/averages`;
+
+      if (windowParam === "custom" && start && end) {
+        historyUrl += `&start_date=${start}&end_date=${end}`;
+        avgUrl += `?start_date=${start}&end_date=${end}`;
+      } else if (windowParam !== "custom" && windowParam !== "all") {
+        historyUrl += `&window=${windowParam}`;
+        avgUrl += `?window=${windowParam}`;
+      } else if (windowParam === "all") {
+        historyUrl += `&window=all`;
+        avgUrl += `?window=all`;
+      }
+
       const [historyRes, threshRes, avgRes, viewRes] = await Promise.all([
-        fetch(`${baseUrl}/sensor/history?page=${currentPage}&limit=10`, { headers }),
+        fetch(historyUrl, { headers }),
         fetch(`${baseUrl}/thresholds`, { headers }),
-        fetch(`${baseUrl}/sensor/averages?window=${windowParam}`, { headers }),
+        fetch(avgUrl, { headers }),
         fetch(`${baseUrl}/config/guest-cards`, { headers }),
       ]);
 
-      if (!historyRes.ok) {
-        throw new Error("Failed to fetch sensor history.");
-      }
+      if (!historyRes.ok) throw new Error("Failed to fetch sensor history.");
 
       const result = await historyRes.json();
       const rawData = result.data || [];
 
-      // Format numeric API telemetry
       const formatted: FormattedReading[] = rawData.map((item: any) => {
         const dateObj = new Date(item.reading_time || item.created_at);
         return {
@@ -131,11 +149,8 @@ export default function SensorHistory() {
       });
 
       setReadings(formatted);
-      if (result.pagination) {
-        setPagination(result.pagination);
-      }
+      if (result.pagination) setPagination(result.pagination);
 
-      // Map thresholds
       if (threshRes.ok) {
         const threshResult = await threshRes.json();
         const threshMap: Record<string, ThresholdItem> = {};
@@ -145,13 +160,11 @@ export default function SensorHistory() {
         setThresholds(threshMap);
       }
 
-      // Map global view config
       if (viewRes.ok) {
         const viewResult = await viewRes.json();
         setViewConfig(viewResult.data);
       }
 
-      // Map window averages
       if (avgRes.ok) {
         const avgResult = await avgRes.json();
         setWindowSummary(avgResult.data?.summary || null);
@@ -166,26 +179,23 @@ export default function SensorHistory() {
     }
   }, []);
 
+  // 4. Added startDate and endDate to dependency array
   useEffect(() => {
-    fetchHistoryData(page, selectedWindow);
+    fetchHistoryData(page, selectedWindow, startDate, endDate);
     const interval = setInterval(() => {
-      fetchHistoryData(page, selectedWindow);
+      fetchHistoryData(page, selectedWindow, startDate, endDate);
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchHistoryData, page, selectedWindow]);
+  }, [fetchHistoryData, page, selectedWindow, startDate, endDate]);
 
-  // Filter available options based on thresholds AND Global View Settings
   const activeSensorOptions = useMemo(() => {
     return sensorOptions.filter((option) => {
-      // 1. Check Global Thresholds (LoRa doesn't have thresholds, so default to true if undefined)
       const thresholdKey = option.value === "kelembapan_tanah" ? "kelembapan_tanah" : option.value;
       const isThresholdEnabled = thresholds[thresholdKey] ? thresholds[thresholdKey].is_enabled !== 0 : true;
 
-      // 2. Check Global View Config
       let isViewEnabled = true;
       if (viewConfig) {
-        // Map UI names to config names
         const configKey = option.value === "kelembapan_tanah" ? "kelembapan_tanah" : option.value;
         isViewEnabled = viewConfig[configKey as keyof GuestCardConfig] !== false;
       }
@@ -194,7 +204,6 @@ export default function SensorHistory() {
     });
   }, [thresholds, viewConfig]);
 
-  // Auto-fallback if the currently selected sensor becomes disabled
   useEffect(() => {
     if (
       activeSensorOptions.length > 0 &&
@@ -204,7 +213,6 @@ export default function SensorHistory() {
     }
   }, [activeSensorOptions, selectedSensor]);
 
-  // Dynamic calculations for current value and min/max stats
   const latestValue = useMemo(() => {
     if (readings.length === 0) return "--";
     return readings[0][selectedSensor.value];
@@ -229,11 +237,9 @@ export default function SensorHistory() {
     return (sum / values.length).toFixed(2);
   }, [readings, selectedSensor]);
 
-  // Map API response window summary to currently selected sensor
   const windowAvgStat = useMemo(() => {
     if (!windowSummary) return "--";
 
-    // Map parameter key to API response field name
     const apiKeyMap: Record<string, keyof WindowSummary> = {
       kelembapan_tanah: "avg_kelembapan_tanah",
       suhu: "avg_suhu",
@@ -254,7 +260,6 @@ export default function SensorHistory() {
 
   return (
     <div className="px-4 py-5 lg:px-8 lg:py-7">
-      {/* Page header - Stack vertically on small screens, row on medium+ */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[#152619]">
@@ -277,9 +282,7 @@ export default function SensorHistory() {
         </div>
       )}
 
-      {/* Main Container */}
       <Card className="mt-6 p-4 sm:p-5">
-        {/* Chart header & Filters */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h2 className="text-sm font-semibold text-[#28402d]">
@@ -290,7 +293,6 @@ export default function SensorHistory() {
             </p>
           </div>
 
-          {/* Dynamic Sensor selector */}
           <div className="w-full lg:w-auto">
             <div className="flex flex-wrap gap-2">
               {activeSensorOptions.map((sensor) => {
@@ -302,8 +304,8 @@ export default function SensorHistory() {
                     type="button"
                     onClick={() => setSelectedSensor(sensor)}
                     className={`rounded-lg px-3 py-2 text-xs font-medium transition ${isSelected
-                        ? "bg-[#347b49] text-white shadow-sm"
-                        : "bg-[#f2f6f3] text-[#5f7064] hover:bg-[#e7eee9]"
+                      ? "bg-[#347b49] text-white shadow-sm"
+                      : "bg-[#f2f6f3] text-[#5f7064] hover:bg-[#e7eee9]"
                       }`}
                   >
                     {sensor.label}
@@ -314,7 +316,6 @@ export default function SensorHistory() {
           </div>
         </div>
 
-        {/* Current value */}
         <div className="mt-5 flex items-end gap-2">
           <span className="text-3xl font-semibold tracking-tight text-[#25352a]">
             {latestValue}
@@ -324,7 +325,6 @@ export default function SensorHistory() {
           </span>
         </div>
 
-        {/* Chart Component */}
         <div className="mt-4 overflow-hidden">
           {loading && readings.length === 0 ? (
             <div className="flex h-64 items-center justify-center text-xs text-[#617565]">
@@ -335,43 +335,53 @@ export default function SensorHistory() {
               data={[...readings].reverse()}
               dataKey={selectedSensor.value}
               unit={selectedSensor.unit}
+              yAxisLabel={selectedSensor.label}
             />
           )}
         </div>
 
-        {/* Table Component */}
-        <div className="mt-6 border-t border-[#edf1ed] pt-5">
-          <SensorHistoryTable
-            data={readings}
-            pagination={pagination}
-            page={page}
-            onPageChange={(newPage: number) => setPage(newPage)}
-            loading={loading}
-          />
-        </div>
-
         {/* Summary Stats Header & Time-Window Filter */}
         <div className="mt-5 border-t border-[#edf1ed] pt-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4">
             <span className="text-xs font-semibold text-[#28402d]">
               Statistical Aggregates
             </span>
 
-            {/* Time Window Selector Buttons */}
-            <div className="flex items-center w-fit gap-1 rounded-lg bg-[#f2f6f3] p-1 text-[11px]">
-              {(["24h", "7d", "30d"] as const).map((win) => (
-                <button
-                  key={win}
-                  type="button"
-                  onClick={() => setSelectedWindow(win)}
-                  className={`rounded-md px-2.5 py-1 font-semibold transition ${selectedWindow === win
-                      ? "bg-[#347b49] text-white shadow-2xs"
+            {/* 5. UI Controls for Time Window & Custom Dates */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-1 rounded-lg bg-[#f2f6f3] p-1 text-[11px] w-fit">
+                {(["all", "24h", "7d", "30d", "custom"] as WindowFilter[]).map((win) => (
+                  <button
+                    key={win}
+                    type="button"
+                    onClick={() => setSelectedWindow(win)}
+                    className={`rounded-md px-2.5 py-1 font-semibold transition ${selectedWindow === win
+                      ? "bg-[#347b49] text-white shadow-xs"
                       : "text-[#5f7064] hover:text-[#152619]"
-                    }`}
-                >
-                  {win.toUpperCase()}
-                </button>
-              ))}
+                      }`}
+                  >
+                    {win.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
+              {selectedWindow === "custom" && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="text-xs border border-[#e3ebe4] rounded-md px-2.5 py-1.5 outline-none focus:border-[#347b49]"
+                  />
+                  <span className="text-[#849187] text-[11px] font-medium">to</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="text-xs border border-[#e3ebe4] rounded-md px-2.5 py-1.5 outline-none focus:border-[#347b49]"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -413,6 +423,16 @@ export default function SensorHistory() {
               </p>
             </div>
           </div>
+        </div>
+
+        <div className="mt-6 border-t border-[#edf1ed] pt-5">
+          <SensorHistoryTable
+            data={readings}
+            pagination={pagination}
+            page={page}
+            onPageChange={(newPage: number) => setPage(newPage)}
+            loading={loading}
+          />
         </div>
       </Card>
     </div>

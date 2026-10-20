@@ -8,7 +8,8 @@ import {
   Sprout,
   Users,
   Sliders,
-  X
+  X,
+  ServerCog
 } from "lucide-react";
 import LoginModal from "../common/LoginModal";
 import { useAuth } from "../../context/AuthContext";
@@ -26,6 +27,12 @@ const menuItems = [
     path: "/sensor-history",
     icon: ChartNoAxesCombined,
     roles: ["farmer", "admin"],
+  },
+  {
+    name: "System Status",
+    path: "/system-status",
+    icon: ServerCog,
+    roles: ["admin"],
   },
   {
     name: "Alerts",

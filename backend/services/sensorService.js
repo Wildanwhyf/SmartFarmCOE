@@ -20,7 +20,10 @@ class SensorService {
       frequency = null,
       spreading_factor = null,
       bandwidth = null,
-      last_activity = null
+      last_activity = null,
+      throughput = null,
+      packet_loss = null,
+      jitter = null
     } = payload;
 
     const connection = await db.getConnection();
@@ -28,17 +31,29 @@ class SensorService {
     try {
       await connection.beginTransaction();
 
+      // Calculate Delay (Difference between Server Time and Sensor Payload Time)
+      const serverTime = new Date();
+      const sensorTime = time ? new Date(time) : serverTime;
+
+      let delayMs = null;
+      if (time) {
+        delayMs = serverTime.getTime() - sensorTime.getTime();
+        // Prevent negative delay if sensor clock is slightly ahead of server clock
+        if (delayMs < 0) delayMs = 0;
+      }
+
+      // Updated INSERT query including new QoS parameters
       const insertQuery = `
         INSERT INTO sensor_readings 
-        (reading_time, kelembapan_tanah, suhu, tekanan, humidity, nitrogen, phosphorus, potassium, rssi, snr, status, frequency, spreading_factor, bandwidth, last_activity)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (reading_time, kelembapan_tanah, suhu, tekanan, humidity, nitrogen, phosphorus, potassium, rssi, snr, status, frequency, spreading_factor, bandwidth, last_activity, throughput, delay, packet_loss, jitter)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const parseNum = (val) => (val !== null && val !== undefined && val !== '' ? parseFloat(val) : null);
       const parseIntNum = (val) => (val !== null && val !== undefined && val !== '' ? parseInt(val, 10) : null);
 
       const values = [
-        time ? new Date(time) : new Date(),
+        sensorTime,
         parseNum(kelembapan_tanah),
         parseNum(suhu),
         parseNum(tekanan),
@@ -52,7 +67,11 @@ class SensorService {
         frequency,
         spreading_factor,
         bandwidth,
-        last_activity
+        last_activity,
+        parseNum(throughput),
+        delayMs,              // Automatically calculated delay in MS
+        parseNum(packet_loss),
+        parseNum(jitter)
       ];
 
       const [result] = await connection.execute(insertQuery, values);
@@ -131,21 +150,43 @@ class SensorService {
   }
 
   /**
-   * Fetch paginated sensor history (Farmer, Admin).
-   */
-  async getHistory(pagination = {}) {
+     * Fetch paginated sensor history with dynamic time filtering (Farmer, Admin).
+     */
+  async getHistory(pagination = {}, filters = {}) {
     const page = parseInt(pagination.page, 10) || 1;
     const limit = parseInt(pagination.limit, 10) || 10;
     const offset = (page - 1) * limit;
 
-    const [rows] = await db.query(
-      'SELECT * FROM sensor_readings ORDER BY reading_time DESC LIMIT ? OFFSET ?',
-      [limit, offset]
-    );
+    let whereClause = '';
+    const queryParams = [];
 
-    const [[{ total }]] = await db.query(
-      'SELECT COUNT(*) as total FROM sensor_readings'
-    );
+    // Handle predefined time windows (24h, 7d, 30d)
+    if (filters.window) {
+      const intervalMap = {
+        '1h': 'INTERVAL 1 HOUR',
+        '6h': 'INTERVAL 6 HOUR',
+        '24h': 'INTERVAL 24 HOUR',
+        '7d': 'INTERVAL 7 DAY',
+        '30d': 'INTERVAL 30 DAY'
+      };
+      const intervalSQL = intervalMap[filters.window];
+      if (intervalSQL) {
+        whereClause = `WHERE reading_time >= NOW() - ${intervalSQL}`;
+      }
+    }
+    // Handle custom date ranges (choose a date)
+    else if (filters.startDate && filters.endDate) {
+      whereClause = 'WHERE reading_time BETWEEN ? AND ?';
+      queryParams.push(new Date(filters.startDate), new Date(filters.endDate));
+    }
+
+    // Build the final queries
+    const dataQuery = `SELECT * FROM sensor_readings ${whereClause} ORDER BY reading_time DESC LIMIT ? OFFSET ?`;
+    const countQuery = `SELECT COUNT(*) as total FROM sensor_readings ${whereClause}`;
+
+    // Execute queries
+    const [rows] = await db.query(dataQuery, [...queryParams, limit, offset]);
+    const [[{ total }]] = await db.query(countQuery, queryParams);
 
     return {
       data: rows,
@@ -237,7 +278,6 @@ class SensorService {
    * Fetch averaged sensor readings over a specific time window (e.g., '1h', '24h', '7d', '30d')
    */
   async getAveragedReadings(timeWindow = '24h') {
-    // Map window string to SQL interval
     const intervalMap = {
       '1h': 'INTERVAL 1 HOUR',
       '6h': 'INTERVAL 6 HOUR',

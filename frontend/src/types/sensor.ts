@@ -18,6 +18,10 @@ export interface LiveSensorApiResponse {
     bandwidth: string;
     last_activity: string;
     created_at: string;
+    throughput?: number;
+    packet_loss?: number;
+    jitter?: number;
+    delay?: number; // Calculated on backend
   };
 }
 

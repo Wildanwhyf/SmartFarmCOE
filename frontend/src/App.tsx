@@ -12,6 +12,7 @@ import SensorHistory from "./pages/SensorHistory";
 import Alerts from "./pages/Alerts";
 import UserManagement from "./pages/UserManagement";
 import AlertThresholds from "./pages/AlertThresholds";
+import SystemStatus from "./pages/SystemStatus";
 
 function App() {
   return (
@@ -27,7 +28,7 @@ function App() {
             element={<SensorHistory />}
           />
 
-            <Route
+          <Route
             path="/alerts"
             element={<Alerts />}
           />
@@ -40,6 +41,11 @@ function App() {
           <Route
             path="/thresholds"
             element={<AlertThresholds />}
+          />
+
+          <Route
+            path="/system-status"
+            element={<SystemStatus />}
           />
 
           <Route
