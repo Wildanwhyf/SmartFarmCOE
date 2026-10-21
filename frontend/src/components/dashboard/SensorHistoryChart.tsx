@@ -9,10 +9,10 @@ import {
 } from "recharts";
 
 interface SensorHistoryChartProps {
-  data: any[];
-  dataKey: string;
+  data: any[]; 
+  dataKey: string; 
   unit: string;
-  yAxisLabel?: string;
+  yAxisLabel?: string; 
 }
 
 export default function SensorHistoryChart({
@@ -21,6 +21,7 @@ export default function SensorHistoryChart({
   unit,
   yAxisLabel,
 }: SensorHistoryChartProps) {
+  // Fallback to dataKey if no specific label is provided
   const displayYLabel = yAxisLabel || dataKey;
 
   return (
@@ -36,12 +37,11 @@ export default function SensorHistoryChart({
             dataKey="time" 
             stroke="#849187" 
             fontSize={11} 
-            // Add X-Axis Label
             label={{ 
               value: "Time", 
               position: "insideBottom", 
               offset: -10, 
-              fontSize: 13, 
+              fontSize: 11, 
               fontWeight: 600, 
               fill: "#617565" 
             }}
@@ -50,14 +50,13 @@ export default function SensorHistoryChart({
           <YAxis 
             stroke="#849187" 
             fontSize={11} 
-            width={45}
-            // Add Y-Axis Label
+            width={55} // <-- Increased slightly to fit the longer "(unit)" text
             label={{ 
-              value: displayYLabel, 
+              value: `${displayYLabel} (${unit})`, // <-- Combined Label and Unit here!
               angle: -90, 
               position: "insideLeft", 
               offset: -5, 
-              fontSize: 13, 
+              fontSize: 11, 
               fontWeight: 600, 
               fill: "#617565",
               style: { textAnchor: 'middle' }
@@ -73,7 +72,7 @@ export default function SensorHistoryChart({
             }}
             formatter={(value: any) => [
               `${value ?? 0} ${unit}`,
-              displayYLabel,
+              displayYLabel, 
             ]}
           />
           

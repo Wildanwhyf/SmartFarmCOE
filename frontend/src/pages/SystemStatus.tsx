@@ -20,6 +20,15 @@ interface FormattedHistory {
     delay: number;
 }
 
+// 1. Added interface for the Averages API response
+interface SystemWindowSummary {
+    total_readings: number;
+    avg_throughput?: string;
+    avg_packet_loss?: string;
+    avg_delay?: string;
+    avg_jitter?: string;
+}
+
 export interface SystemOption {
     label: string;
     value: string;
@@ -29,7 +38,7 @@ export interface SystemOption {
 const systemOptions: SystemOption[] = [
     { label: "Throughput", value: "throughput", unit: "kbps" },
     { label: "Packet Loss", value: "packet_loss", unit: "%" },
-    { label: "Latency (Delay)", value: "delay", unit: "ms" },
+    { label: "Delay", value: "delay", unit: "ms" },
     { label: "Jitter", value: "jitter", unit: "ms" },
 ];
 
@@ -43,6 +52,9 @@ export default function SystemStatus() {
     const [startDate, setStartDate] = useState<string>("");
     const [endDate, setEndDate] = useState<string>("");
 
+    // 2. State to hold the averages
+    const [windowSummary, setWindowSummary] = useState<SystemWindowSummary | null>(null);
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<string>("--.--.--");
@@ -53,26 +65,33 @@ export default function SystemStatus() {
             const token = localStorage.getItem("token");
             const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
-            // 1. Build the dynamic history URL based on selected time window
+            // 3. Build dynamic URLs for both history AND averages
             let historyUrl = `${baseUrl}/sensor/history/?page=1&limit=100`;
+            let avgUrl = `${baseUrl}/sensor/averages`;
 
             if (selectedWindow === "custom" && startDate && endDate) {
                 historyUrl += `&startDate=${startDate}T00:00:00Z&endDate=${endDate}T23:59:59Z`;
+                avgUrl += `?startDate=${startDate}T00:00:00Z&endDate=${endDate}T23:59:59Z`;
             } else if (selectedWindow !== "all" && selectedWindow !== "custom") {
                 historyUrl += `&window=${selectedWindow}`;
+                avgUrl += `?window=${selectedWindow}`;
+            } else if (selectedWindow === "all") {
+                historyUrl += `&window=all`;
+                avgUrl += `?window=all`;
             }
 
-            // Fetch live data AND history data simultaneously
-            const [liveRes, historyRes] = await Promise.all([
+            // Fetch live data, history data, AND averages simultaneously
+            const [liveRes, historyRes, avgRes] = await Promise.all([
                 fetch(`${baseUrl}/sensor/live`, { headers }),
-                fetch(historyUrl, { headers })
+                fetch(historyUrl, { headers }),
+                fetch(avgUrl, { headers })
             ]);
 
             if (!liveRes.ok || !historyRes.ok) {
                 throw new Error("Failed to fetch system data");
             }
 
-            // 2. Process Live Data
+            // Process Live Data
             const liveResult = await liveRes.json();
             if (liveResult.data) {
                 setLiveData(liveResult.data);
@@ -80,7 +99,7 @@ export default function SystemStatus() {
                 setLastUpdated(dateObj.toTimeString().split(" ")[0].replace(/:/g, "."));
             }
 
-            // 3. Process History Data for Graph
+            // Process History Data for Graph
             const historyResult = await historyRes.json();
             const rawHistory = historyResult.data || [];
 
@@ -101,6 +120,13 @@ export default function SystemStatus() {
             });
 
             setHistoryData(formattedHistory);
+
+            // 4. Process Averages Data
+            if (avgRes.ok) {
+                const avgResult = await avgRes.json();
+                setWindowSummary(avgResult.data?.summary || null);
+            }
+
             setError(null);
         } catch (err) {
             console.error(err);
@@ -108,26 +134,36 @@ export default function SystemStatus() {
         } finally {
             setLoading(false);
         }
-    }, [selectedWindow, startDate, endDate]); // Re-create function when filters change
+    }, [selectedWindow, startDate, endDate]);
 
     useEffect(() => {
         fetchSystemData();
-        const interval = setInterval(fetchSystemData, 10000); // Live polling every 10s
+        const interval = setInterval(fetchSystemData, 10000);
         return () => clearInterval(interval);
-    }, [fetchSystemData]); // Auto-fetches immediately when fetchSystemData changes
+    }, [fetchSystemData]);
 
-    // Fallbacks for top live cards
     const throughput = liveData?.throughput ?? 0;
     const packetLoss = liveData?.packet_loss ?? 0;
     const jitter = liveData?.jitter ?? 0;
     const delay = liveData?.delay ?? 0;
     const isOnline = liveData?.status === "READY";
 
-    // Dynamic calculations for the graph's current/latest value
     const latestGraphValue = useMemo(() => {
         if (historyData.length === 0) return "--";
         return historyData[0][selectedMetric.value as keyof FormattedHistory];
     }, [historyData, selectedMetric]);
+
+    // 5. Helper function to pull the correct average based on the selected tab
+    const getSelectedAverage = () => {
+        if (!windowSummary) return "--";
+        switch (selectedMetric.value) {
+            case "throughput": return parseFloat(windowSummary.avg_throughput || "0").toFixed(2);
+            case "packet_loss": return parseFloat(windowSummary.avg_packet_loss || "0").toFixed(2);
+            case "delay": return parseFloat(windowSummary.avg_delay || "0").toFixed(2);
+            case "jitter": return parseFloat(windowSummary.avg_jitter || "0").toFixed(2);
+            default: return "--";
+        }
+    };
 
     return (
         <div className="px-4 py-5 lg:px-8 lg:py-7">
@@ -159,7 +195,7 @@ export default function SystemStatus() {
                 </div>
             )}
 
-            {/* 1. Live Diagnostic Cards */}
+            {/* Live Diagnostic Cards */}
             {loading && !liveData ? (
                 <div className="flex h-32 items-center justify-center rounded-2xl border border-[#e3ebe4] bg-white">
                     <p className="text-sm font-medium text-[#617565]">Analyzing network health...</p>
@@ -196,13 +232,13 @@ export default function SystemStatus() {
                         </div>
                     </Card>
 
-                    {/* Latency / Delay Card */}
+                    {/* Delay Card */}
                     <Card className="p-5 flex flex-col justify-between min-h-[130px]">
                         <div className="flex items-center gap-2">
                             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#fdf8e8] text-[#d99f24]">
                                 <Timer size={18} />
                             </div>
-                            <h2 className="text-sm font-semibold text-[#28402d]">Latency (Delay)</h2>
+                            <h2 className="text-sm font-semibold text-[#28402d]">Delay</h2>
                         </div>
                         <div className="mt-4">
                             <span className="text-3xl font-bold tracking-tight text-[#1f3022]">{delay}</span>
@@ -226,7 +262,7 @@ export default function SystemStatus() {
                 </div>
             )}
 
-            {/* 2. Interactive Historical Trend Graph */}
+            {/* Interactive Historical Trend Graph */}
             <Card className="mt-6 p-4 sm:p-5">
                 {/* Chart Header & Filters */}
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between border-b border-[#edf1ed] pb-5">
@@ -331,6 +367,46 @@ export default function SystemStatus() {
                         />
                     )}
                 </div>
+
+                {/* 6. Averages Section (Matches Sensor History styling) */}
+                <div className="mt-6 border-t border-[#edf1ed] pt-5">
+                    <h3 className="text-xs font-semibold text-[#28402d] mb-4">
+                        Statistical Aggregates
+                    </h3>
+
+                    <div className="grid grid-cols-2 gap-4 sm:gap-3 sm:grid-cols-4">
+                        <div>
+                            <p className="text-[11px] text-[#849187] uppercase">
+                                {selectedWindow === "all" ? "All-Time" : selectedWindow} {selectedMetric.label} Avg
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-[#347b49]">
+                                {getSelectedAverage()} {selectedMetric.unit}
+                            </p>
+                        </div>
+
+                        <div>
+                            <p className="text-[11px] text-[#849187]">Total Network Samples</p>
+                            <p className="mt-1 text-sm font-semibold text-[#3b5141]">
+                                {windowSummary?.total_readings ?? "--"} readings
+                            </p>
+                        </div>
+
+                        <div>
+                            <p className="text-[11px] text-[#849187]">Avg Packet Loss</p>
+                            <p className="mt-1 text-sm font-semibold text-[#e02424]">
+                                {windowSummary?.avg_packet_loss ? parseFloat(windowSummary.avg_packet_loss).toFixed(2) : "--"} %
+                            </p>
+                        </div>
+
+                        <div>
+                            <p className="text-[11px] text-[#849187]">Avg Latency</p>
+                            <p className="mt-1 text-sm font-semibold text-[#d99f24]">
+                                {windowSummary?.avg_delay ? parseFloat(windowSummary.avg_delay).toFixed(2) : "--"} ms
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
             </Card>
 
         </div>

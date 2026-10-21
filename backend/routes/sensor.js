@@ -83,14 +83,14 @@ router.patch('/warnings/:id/acknowledge', authenticate, requireFarmerOrAdmin, as
   res.status(200).json(result);
 }));
 
-// GET /api/sensor/averages?window=24h (Guest, Farmer, Admin)
+// GET /api/sensor/averages?window=24h OR ?startDate=...&endDate=...
 router.get('/averages/', asyncHandler(async (req, res) => {
-  const { window: timeWindow } = req.query; // Accepts '1h', '24h', '7d', '30d'
+  const { window, startDate, endDate } = req.query;
 
-  const averages = await sensorService.getAveragedReadings(timeWindow);
+  const averages = await sensorService.getAveragedReadings({ window, startDate, endDate });
 
   res.status(200).json({
-    message: `Averaged sensor readings retrieved successfully for window '${averages.window}'`,
+    message: 'Averaged sensor readings retrieved successfully',
     data: averages
   });
 }));

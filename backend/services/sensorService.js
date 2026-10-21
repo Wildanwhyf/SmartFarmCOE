@@ -274,20 +274,33 @@ class SensorService {
     return { message: 'Warning acknowledged successfully' };
   }
 
-  /**
-   * Fetch averaged sensor readings over a specific time window (e.g., '1h', '24h', '7d', '30d')
+/**
+   * Fetch averaged sensor readings over a specific time window or custom date range.
    */
-  async getAveragedReadings(timeWindow = '24h') {
-    const intervalMap = {
-      '1h': 'INTERVAL 1 HOUR',
-      '6h': 'INTERVAL 6 HOUR',
-      '24h': 'INTERVAL 24 HOUR',
-      '7d': 'INTERVAL 7 DAY',
-      '30d': 'INTERVAL 30 DAY'
-    };
+  async getAveragedReadings(filters = {}) {
+    let whereClause = '';
+    const queryParams = [];
 
-    const intervalSQL = intervalMap[timeWindow] || intervalMap['24h'];
+    // 1. Handle custom date ranges
+    if (filters.startDate && filters.endDate) {
+      whereClause = 'WHERE reading_time BETWEEN ? AND ?';
+      queryParams.push(new Date(filters.startDate), new Date(filters.endDate));
+    } 
+    // 2. Handle predefined time windows (default to 24h)
+    else {
+      const timeWindow = filters.window || '24h';
+      const intervalMap = {
+        '1h': 'INTERVAL 1 HOUR',
+        '6h': 'INTERVAL 6 HOUR',
+        '24h': 'INTERVAL 24 HOUR',
+        '7d': 'INTERVAL 7 DAY',
+        '30d': 'INTERVAL 30 DAY'
+      };
+      const intervalSQL = intervalMap[timeWindow] || intervalMap['24h'];
+      whereClause = `WHERE reading_time >= NOW() - ${intervalSQL}`;
+    }
 
+    // 3. Add QoS metrics to the SELECT query
     const query = `
       SELECT 
         COUNT(id) AS total_readings,
@@ -295,15 +308,21 @@ class SensorService {
         ROUND(AVG(tekanan), 2) AS avg_tekanan,
         ROUND(AVG(humidity), 2) AS avg_humidity,
         ROUND(AVG(kelembapan_tanah), 2) AS avg_kelembapan_tanah,
+        ROUND(AVG(throughput), 2) AS avg_throughput,
+        ROUND(AVG(delay), 0) AS avg_delay,
+        ROUND(AVG(packet_loss), 2) AS avg_packet_loss,
+        ROUND(AVG(jitter), 2) AS avg_jitter,
         MIN(reading_time) AS window_start,
         MAX(reading_time) AS window_end
       FROM sensor_readings
-      WHERE reading_time >= NOW() - ${intervalSQL}
+      ${whereClause}
     `;
 
-    const [rows] = await db.execute(query);
+    // Use db.query to allow parameterized inputs for custom dates
+    const [rows] = await db.query(query, queryParams);
+    
     return {
-      window: timeWindow,
+      filters,
       summary: rows[0]
     };
   }
