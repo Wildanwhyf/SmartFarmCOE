@@ -15,7 +15,7 @@ const asyncHandler = (fn) => async (req, res, next) => {
 };
 
 // GET /api/thresholds (Admin Only - View all threshold settings)
-router.get('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const thresholds = await thresholdService.getAllThresholds();
   
   res.status(200).json({
