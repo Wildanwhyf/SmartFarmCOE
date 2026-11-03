@@ -20,7 +20,6 @@ interface FormattedHistory {
     delay: number;
 }
 
-// 1. Added interface for the Averages API response
 interface SystemWindowSummary {
     total_readings: number;
     avg_throughput?: string;
@@ -43,6 +42,9 @@ const systemOptions: SystemOption[] = [
 ];
 
 export default function SystemStatus() {
+    // 1. State untuk Mode Toggle (Internet vs LoRa)
+    const [monitorMode, setMonitorMode] = useState<"internet" | "lora">("internet");
+
     const [liveData, setLiveData] = useState<SystemStatusData | null>(null);
     const [historyData, setHistoryData] = useState<FormattedHistory[]>([]);
     const [selectedMetric, setSelectedMetric] = useState<SystemOption>(systemOptions[0]);
@@ -52,22 +54,23 @@ export default function SystemStatus() {
     const [startDate, setStartDate] = useState<string>("");
     const [endDate, setEndDate] = useState<string>("");
 
-    // 2. State to hold the averages
     const [windowSummary, setWindowSummary] = useState<SystemWindowSummary | null>(null);
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<string>("--.--.--");
 
     const fetchSystemData = useCallback(async () => {
         try {
-            const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+            setLoading(true);
+            const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
             const token = localStorage.getItem("token");
             const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
-            // 3. Build dynamic URLs for both history AND averages
-            let historyUrl = `${baseUrl}/sensor/history/?page=1&limit=100`;
-            let avgUrl = `${baseUrl}/sensor/averages`;
+            // 2. Dinamis menentukan endpoint berdasarkan mode yang dipilih
+            const resourcePath = monitorMode === "internet" ? "/internet" : "/sensor";
+
+            let historyUrl = `${baseUrl}${resourcePath}/history/?page=1&limit=100`;
+            let avgUrl = `${baseUrl}${resourcePath}/averages`;
 
             if (selectedWindow === "custom" && startDate && endDate) {
                 historyUrl += `&startDate=${startDate}T00:00:00Z&endDate=${endDate}T23:59:59Z`;
@@ -82,7 +85,7 @@ export default function SystemStatus() {
 
             // Fetch live data, history data, AND averages simultaneously
             const [liveRes, historyRes, avgRes] = await Promise.all([
-                fetch(`${baseUrl}/sensor/live`, { headers }),
+                fetch(`${baseUrl}${resourcePath}/live`, { headers }),
                 fetch(historyUrl, { headers }),
                 fetch(avgUrl, { headers })
             ]);
@@ -121,10 +124,10 @@ export default function SystemStatus() {
 
             setHistoryData(formattedHistory);
 
-            // 4. Process Averages Data
+            // Process Averages Data
             if (avgRes.ok) {
                 const avgResult = await avgRes.json();
-                setWindowSummary(avgResult.data?.summary || null);
+                setWindowSummary(avgResult.data?.summary || avgResult.summary || null);
             }
 
             setError(null);
@@ -134,11 +137,11 @@ export default function SystemStatus() {
         } finally {
             setLoading(false);
         }
-    }, [selectedWindow, startDate, endDate]);
+    }, [selectedWindow, startDate, endDate, monitorMode]); // Tambahkan monitorMode ke dependensi
 
     useEffect(() => {
         fetchSystemData();
-        const interval = setInterval(fetchSystemData, 10000);
+        const interval = setInterval(fetchSystemData, 60000); // 60 detik sinkron dengan Cron Job Anda
         return () => clearInterval(interval);
     }, [fetchSystemData]);
 
@@ -146,14 +149,17 @@ export default function SystemStatus() {
     const packetLoss = liveData?.packet_loss ?? 0;
     const jitter = liveData?.jitter ?? 0;
     const delay = liveData?.delay ?? 0;
-    const isOnline = liveData?.status === "READY";
+    
+    // Indikator status yang dinamis berdasarkan mode
+    const isOnline = monitorMode === "lora" 
+        ? liveData?.status === "READY" 
+        : (liveData?.status === "INTERNET_PRIMARY" || liveData?.status === "INTERNET_FAILOVER");
 
     const latestGraphValue = useMemo(() => {
         if (historyData.length === 0) return "--";
         return historyData[0][selectedMetric.value as keyof FormattedHistory];
     }, [historyData, selectedMetric]);
 
-    // 5. Helper function to pull the correct average based on the selected tab
     const getSelectedAverage = () => {
         if (!windowSummary) return "--";
         switch (selectedMetric.value) {
@@ -169,7 +175,7 @@ export default function SystemStatus() {
         <div className="px-4 py-5 lg:px-8 lg:py-7">
 
             {/* Page Header */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight text-[#152619]">
                         System Status
@@ -181,12 +187,36 @@ export default function SystemStatus() {
                 <div className="sm:text-right">
                     <div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold tracking-wide ${isOnline ? "bg-[#e8f6eb] text-[#28733d]" : "bg-[#fde8e8] text-[#e02424]"}`}>
                         <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-[#43c878] animate-pulse" : "bg-[#e02424]"}`} />
-                        {isOnline ? "GATEWAY ONLINE" : "OFFLINE"}
+                        {isOnline ? (monitorMode === "internet" ? "INTERNET ONLINE" : "GATEWAY ONLINE") : "OFFLINE"}
                     </div>
                     <p className="mt-1.5 text-[11px] font-mono text-[#849187]">
                         Updated: {lastUpdated}
                     </p>
                 </div>
+            </div>
+
+            {/* 3. Toggle Buttons (Internet vs LoRa) */}
+            <div className="flex space-x-3 mb-6">
+                <button
+                    onClick={() => setMonitorMode('internet')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm ${
+                        monitorMode === 'internet' 
+                        ? 'bg-[#347b49] text-white' 
+                        : 'bg-white text-[#5f7064] border border-[#e3ebe4] hover:bg-[#f2f6f3]'
+                    }`}
+                >
+                    🌐 Internet (Ookla)
+                </button>
+                <button
+                    onClick={() => setMonitorMode('lora')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm ${
+                        monitorMode === 'lora' 
+                        ? 'bg-[#347b49] text-white' 
+                        : 'bg-white text-[#5f7064] border border-[#e3ebe4] hover:bg-[#f2f6f3]'
+                    }`}
+                >
+                    📡 LoRa Network
+                </button>
             </div>
 
             {error && (
@@ -212,7 +242,9 @@ export default function SystemStatus() {
                         </div>
                         <div className="mt-4">
                             <span className="text-3xl font-bold tracking-tight text-[#1f3022]">{throughput}</span>
-                            <span className="ml-1 text-sm font-medium text-[#849187]">kbps</span>
+                            <span className="ml-1 text-sm font-medium text-[#849187]">
+                                {monitorMode === 'internet' ? 'Mbps' : 'kbps'}
+                            </span>
                         </div>
                     </Card>
 
@@ -268,7 +300,7 @@ export default function SystemStatus() {
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between border-b border-[#edf1ed] pb-5">
                     <div>
                         <h2 className="text-sm font-semibold text-[#28402d]">
-                            {selectedMetric.label} Trend
+                            {selectedMetric.label} Trend ({monitorMode === 'internet' ? 'Ookla' : 'LoRa'})
                         </h2>
                         <p className="mt-1 text-xs text-[#849187]">
                             Historical network performance
@@ -348,7 +380,7 @@ export default function SystemStatus() {
                         {latestGraphValue}
                     </span>
                     <span className="mb-1 text-sm font-medium text-[#78867c]">
-                        {selectedMetric.unit}
+                        {monitorMode === 'internet' && selectedMetric.value === 'throughput' ? 'Mbps' : selectedMetric.unit}
                     </span>
                 </div>
 
@@ -362,13 +394,13 @@ export default function SystemStatus() {
                         <SensorHistoryChart
                             data={[...historyData].reverse() as any[]}
                             dataKey={selectedMetric.value as any}
-                            unit={selectedMetric.unit}
+                            unit={monitorMode === 'internet' && selectedMetric.value === 'throughput' ? 'Mbps' : selectedMetric.unit}
                             yAxisLabel={selectedMetric.label}
                         />
                     )}
                 </div>
 
-                {/* 6. Averages Section (Matches Sensor History styling) */}
+                {/* Statistical Aggregates */}
                 <div className="mt-6 border-t border-[#edf1ed] pt-5">
                     <h3 className="text-xs font-semibold text-[#28402d] mb-4">
                         Statistical Aggregates
@@ -380,7 +412,7 @@ export default function SystemStatus() {
                                 {selectedWindow === "all" ? "All-Time" : selectedWindow} {selectedMetric.label} Avg
                             </p>
                             <p className="mt-1 text-sm font-semibold text-[#347b49]">
-                                {getSelectedAverage()} {selectedMetric.unit}
+                                {getSelectedAverage()} {monitorMode === 'internet' && selectedMetric.value === 'throughput' ? 'Mbps' : selectedMetric.unit}
                             </p>
                         </div>
 

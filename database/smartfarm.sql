@@ -75,6 +75,23 @@ CREATE TABLE `sensor_readings` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `InternetMonitor`
+--
+
+CREATE TABLE `internetmonitor` (
+  `id` bigint(20) NOT NULL,
+  `reading_time` datetime NOT NULL,
+  `status` varchar(50) DEFAULT NULL,
+  `last_activity` varchar(50) DEFAULT NULL,
+  `throughput` decimal(10,2) DEFAULT NULL,
+  `delay` int(11) DEFAULT NULL COMMENT 'Calculated in milliseconds',
+  `packet_loss` decimal(5,2) DEFAULT NULL COMMENT 'Percentage',
+  `jitter` decimal(10,2) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `system_settings`
 --
 
