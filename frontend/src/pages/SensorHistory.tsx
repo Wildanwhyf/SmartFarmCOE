@@ -93,7 +93,7 @@ export default function SensorHistory() {
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
       // Dynamically build History URL and Averages URL
-      let historyUrl = `${baseUrl}/sensor/history?page=${currentPage}&limit=10`;
+      let historyUrl = `${baseUrl}/sensor/history?page=${currentPage}&limit=100`;
       let avgUrl = `${baseUrl}/sensor/averages`;
 
       if (windowParam === "custom" && start && end) {
