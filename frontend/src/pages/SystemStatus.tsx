@@ -69,8 +69,8 @@ export default function SystemStatus() {
             let avgUrl = `${baseUrl}/sensor/averages?method=${dataSource}`;
 
             if (selectedWindow === "custom" && startDate && endDate) {
-                historyUrl += `&startDate=${startDate}&endDate=${endDate}`;
-                avgUrl += `&startDate=${startDate}&endDate=${endDate}`;
+                historyUrl += `&startDate=${startDate}T00:00:00Z&endDate=${endDate}T23:59:59Z`;
+                avgUrl += `&startDate=${startDate}T00:00:00Z&endDate=${endDate}T23:59:59Z`;
             } else if (selectedWindow !== "all" && selectedWindow !== "custom") {
                 historyUrl += `&window=${selectedWindow}`;
                 avgUrl += `&window=${selectedWindow}`;

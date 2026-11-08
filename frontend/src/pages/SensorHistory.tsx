@@ -54,21 +54,36 @@ interface PaginationMeta {
   totalPages: number;
 }
 
+interface WindowSummary {
+  total_readings: number;
+  avg_suhu?: string;
+  avg_tekanan?: string;
+  avg_humidity?: string;
+  avg_kelembapan_tanah?: string;
+  avg_nitrogen?: string;
+  avg_phosphorus?: string;
+  avg_potassium?: string;
+  window_start?: string;
+  window_end?: string;
+}
+
+// 1. Defined available window options
 type WindowFilter = "all" | "24h" | "7d" | "30d" | "custom";
 type TransmissionFilter = "ALL" | "LORA" | "INTERNET";
 
 export default function SensorHistory() {
   const [selectedSensor, setSelectedSensor] = useState<SensorOption>(sensorOptions[0]);
+  
+  // 2. Added new states for advanced filtering
   const [selectedWindow, setSelectedWindow] = useState<WindowFilter>("7d");
   const [transmissionMethod, setTransmissionMethod] = useState<TransmissionFilter>("ALL");
-  
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
 
   const [readings, setReadings] = useState<FormattedReading[]>([]);
   const [thresholds, setThresholds] = useState<Record<string, ThresholdItem>>({});
   const [viewConfig, setViewConfig] = useState<GuestCardConfig | null>(null);
-  
+  const [windowSummary, setWindowSummary] = useState<WindowSummary | null>(null);
   const [pagination, setPagination] = useState<PaginationMeta>({
     total: 0,
     page: 1,
@@ -79,27 +94,37 @@ export default function SensorHistory() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 3. Updated fetch function to handle custom dates and 'all'
   const fetchHistoryData = useCallback(async (currentPage: number, windowParam: WindowFilter, methodParam: TransmissionFilter, start: string, end: string) => {
     try {
       const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
       const token = localStorage.getItem("token");
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
+      // Dynamically build History URL and Averages URL
       let historyUrl = `${baseUrl}/sensor/history?page=${currentPage}&limit=100`;
+      let avgUrl = `${baseUrl}/sensor/averages`;
+
+      if (windowParam === "custom" && start && end) {
+        historyUrl += `&startDate=${start}T00:00:00Z&endDate=${end}T23:59:59Z`;
+        avgUrl += `?startDate=${start}T00:00:00Z&endDate=${end}T23:59:59Z`;
+      } else if (windowParam !== "custom" && windowParam !== "all") {
+        historyUrl += `&window=${windowParam}`;
+        avgUrl += `?window=${windowParam}`;
+      } else if (windowParam === "all") {
+        historyUrl += `&window=all`;
+        avgUrl += `?window=all`;
+      }
 
       if (methodParam !== "ALL") {
         historyUrl += `&method=${methodParam}`;
+        avgUrl += `&method=${methodParam}`;
       }
 
-      if (windowParam === "custom" && start && end) {
-        historyUrl += `&startDate=${start}&endDate=${end}`;
-      } else if (windowParam !== "custom" && windowParam !== "all") {
-        historyUrl += `&window=${windowParam}`;
-      }
-
-      const [historyRes, threshRes, viewRes] = await Promise.all([
+      const [historyRes, threshRes, avgRes, viewRes] = await Promise.all([
         fetch(historyUrl, { headers }),
         fetch(`${baseUrl}/thresholds`, { headers }),
+        fetch(avgUrl, { headers }),
         fetch(`${baseUrl}/config/guest-cards`, { headers }),
       ]);
 
@@ -112,9 +137,19 @@ export default function SensorHistory() {
         const dateObj = new Date(item.reading_time || item.created_at);
         return {
           id: item.id,
-          time: dateObj.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Jakarta" }),
-          date: dateObj.toLocaleDateString("id-ID", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Jakarta" }),
-          kelembapan_tanah: parseFloat(item.kelembapan_tanah || "0"),
+          time: dateObj.toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            timeZone: "Asia/Jakarta",
+          }),
+          date: dateObj.toLocaleDateString("id-ID", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            timeZone: "Asia/Jakarta",
+          }),
+          kelembapan_tanah: parseFloat(item.kelembapan_tanah || item.kelembapan || "0"),
           suhu: parseFloat(item.suhu || "0"),
           tekanan: parseFloat(item.tekanan || "0"),
           humidity: parseFloat(item.humidity || "0"),
@@ -149,6 +184,11 @@ export default function SensorHistory() {
         setViewConfig(viewResult.data);
       }
 
+      if (avgRes.ok) {
+        const avgResult = await avgRes.json();
+        setWindowSummary(avgResult.data?.summary || null);
+      }
+
       setError(null);
     } catch (err) {
       console.error("Sensor history fetch error:", err);
@@ -158,6 +198,7 @@ export default function SensorHistory() {
     }
   }, []);
 
+  // 4. Added startDate and endDate to dependency array
   useEffect(() => {
     fetchHistoryData(page, selectedWindow, transmissionMethod, startDate, endDate);
     const interval = setInterval(() => {
@@ -165,7 +206,7 @@ export default function SensorHistory() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchHistoryData, page, selectedWindow, transmissionMethod, startDate, endDate]);
+  }, [fetchHistoryData, page, selectedWindow, startDate, endDate]);
 
   const activeSensorOptions = useMemo(() => {
     return sensorOptions.filter((option) => {
@@ -181,6 +222,15 @@ export default function SensorHistory() {
       return isThresholdEnabled && isViewEnabled;
     });
   }, [thresholds, viewConfig]);
+
+  useEffect(() => {
+    if (
+      activeSensorOptions.length > 0 &&
+      !activeSensorOptions.some((opt) => opt.value === selectedSensor.value)
+    ) {
+      setSelectedSensor(activeSensorOptions[0]);
+    }
+  }, [activeSensorOptions, selectedSensor]);
 
   const latestValue = useMemo(() => {
     if (readings.length === 0) return "--";
@@ -205,6 +255,27 @@ export default function SensorHistory() {
     const sum = values.reduce((acc, curr) => acc + curr, 0);
     return (sum / values.length).toFixed(2);
   }, [readings, selectedSensor]);
+
+  const windowAvgStat = useMemo(() => {
+    if (!windowSummary) return "--";
+
+    const apiKeyMap: Record<string, keyof WindowSummary> = {
+      kelembapan_tanah: "avg_kelembapan_tanah",
+      suhu: "avg_suhu",
+      tekanan: "avg_tekanan",
+      humidity: "avg_humidity",
+      nitrogen: "avg_nitrogen",
+      phosphorus: "avg_phosphorus",
+      potassium: "avg_potassium",
+    };
+
+    const targetKey = apiKeyMap[selectedSensor.value];
+    if (targetKey && windowSummary[targetKey] !== undefined) {
+      return parseFloat(String(windowSummary[targetKey])).toFixed(2);
+    }
+
+    return "--";
+  }, [windowSummary, selectedSensor]);
 
   return (
     <div className="px-4 py-5 lg:px-8 lg:py-7">
@@ -297,7 +368,7 @@ export default function SensorHistory() {
           )}
         </div>
 
-        {/* Time-Window Filter */}
+        {/* Time-Window Filter & Stats */}
         <div className="mt-5 border-t border-[#edf1ed] pt-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4">
             <span className="text-xs font-semibold text-[#28402d]">
@@ -340,7 +411,7 @@ export default function SensorHistory() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:gap-3 sm:grid-cols-5">
             <div>
               <p className="text-[11px] text-[#849187]">Min (Page)</p>
               <p className="mt-1 text-sm font-semibold text-[#3b5141]">
@@ -354,13 +425,21 @@ export default function SensorHistory() {
               </p>
             </div>
             <div>
+              <p className="text-[11px] text-[#849187] uppercase">
+                {selectedWindow} Window Avg
+              </p>
+              <p className="mt-1 text-sm font-semibold text-[#28733d]">
+                {windowAvgStat} {selectedSensor.unit}
+              </p>
+            </div>
+            <div>
               <p className="text-[11px] text-[#849187]">Max (Page)</p>
               <p className="mt-1 text-sm font-semibold text-[#3b5141]">
                 {maxStat} {selectedSensor.unit}
               </p>
             </div>
             <div>
-              <p className="text-[11px] text-[#849187]">Total Samples</p>
+              <p className="text-[11px] text-[#849187]">Total Data Match</p>
               <p className="mt-1 text-sm font-semibold text-[#3b5141]">
                 {pagination.total} records
               </p>
