@@ -85,7 +85,7 @@ export default function SensorHistory() {
       const token = localStorage.getItem("token");
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
-      let historyUrl = `${baseUrl}/sensor/history?page=${currentPage}&limit=10`;
+      let historyUrl = `${baseUrl}/sensor/history?page=${currentPage}&limit=100`;
 
       if (methodParam !== "ALL") {
         historyUrl += `&method=${methodParam}`;
