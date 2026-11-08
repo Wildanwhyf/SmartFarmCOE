@@ -49,11 +49,11 @@ router.get('/live/', asyncHandler(async (req, res) => {
 
 // GET /api/sensor/history - View paginated sensor history
 router.get('/history/', authenticate, requireFarmerOrAdmin, asyncHandler(async (req, res) => {
-  const { page, limit, window, startDate, endDate } = req.query;
-  
+  const { page, limit, window, startDate, endDate, method } = req.query;
+
   const historyData = await sensorService.getHistory(
     { page, limit },
-    { window, startDate, endDate }
+    { window, startDate, endDate, method }
   );
 
   res.status(200).json(historyData);

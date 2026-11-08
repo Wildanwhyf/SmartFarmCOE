@@ -69,29 +69,11 @@ CREATE TABLE `sensor_readings` (
   `throughput` decimal(10,2) DEFAULT NULL,
   `delay` int(11) DEFAULT NULL COMMENT 'Calculated in milliseconds',
   `packet_loss` decimal(5,2) DEFAULT NULL COMMENT 'Percentage',
-  `jitter` decimal(10,2) DEFAULT NULL
+  `jitter` decimal(10,2) DEFAULT NULL,
+  `transmission_method` VARCHAR(20) DEFAULT 'UNKNOWN'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
 -- --------------------------------------------------------
 
---
--- Table structure for table `InternetMonitor`
---
-
-CREATE TABLE `internetmonitor` (
-  `id` bigint(20) NOT NULL,
-  `reading_time` datetime NOT NULL,
-  `status` varchar(50) DEFAULT NULL,
-  `last_activity` varchar(50) DEFAULT NULL,
-  `throughput` decimal(10,2) DEFAULT NULL,
-  `delay` int(11) DEFAULT NULL COMMENT 'Calculated in milliseconds',
-  `packet_loss` decimal(5,2) DEFAULT NULL COMMENT 'Percentage',
-  `jitter` decimal(10,2) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
 -- Table structure for table `system_settings`
 --
 
@@ -107,6 +89,14 @@ CREATE TABLE `system_settings` (
 
 INSERT INTO `system_settings` (`setting_key`, `setting_value`, `updated_at`) VALUES
 ('guest_card_visibility', '{\"suhu\":true,\"tekanan\":true,\"humidity\":true,\"kelembapan_tanah\":false,\"nitrogen\":false,\"phosphorus\":false,\"potassium\":false,\"rssi\":false,\"snr\":false,\"status\":true,\"frequency\":true,\"spreading_factor\":true,\"bandwidth\":true,\"last_activity\":true,\"throughput\":false,\"delay\":true,\"packet_loss\":true,\"jitter\":false}', '2026-10-20 04:08:23');
+
+--
+-- Dumping data for table `system_settings`
+--
+
+INSERT INTO system_settings (setting_key, setting_value)
+VALUES ('hardware_mode', '"AUTO"') 
+ON DUPLICATE KEY UPDATE setting_value='"AUTO"';
 
 -- --------------------------------------------------------
 

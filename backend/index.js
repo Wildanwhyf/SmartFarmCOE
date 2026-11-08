@@ -1,4 +1,3 @@
-require('./services/internetMonitorService');
 const express = require ('express');
 const dotenv = require ('dotenv');
 const cors = require ('cors');
@@ -6,7 +5,6 @@ const sensorRoutes = require('./routes/sensor');
 const authRoutes = require('./routes/auth');
 const thresholdRoutes = require('./routes/threshold');
 const configRoutes = require('./routes/config');
-const internetRoutes = require('./routes/internet');
 
 dotenv.config();
 
@@ -19,8 +17,6 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.json({ message: 'API running successfully' });
 });
-
-app.use('/api/internet', internetRoutes);
 
 app.use('/api/sensor', sensorRoutes );
 

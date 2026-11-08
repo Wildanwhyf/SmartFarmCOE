@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const db = require('../config/db'); 
 const configService = require('../services/configService');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 
@@ -37,6 +38,23 @@ router.put('/guest-cards', authenticate, requireAdmin, asyncHandler(async (req, 
     message: 'Guest card visibility updated globally',
     data: updatedVisibility
   });
+}));
+
+// GET /api/config/hardware-mode (Public - Frontend & Hardware fetches this)
+router.get('/hardware-mode', asyncHandler(async (req, res) => {
+  const [rows] = await db.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'hardware_mode'");
+  const mode = rows.length > 0 ? JSON.parse(rows[0].setting_value) : "AUTO";
+  res.json({ mode });
+}));
+
+// PUT /api/config/hardware-mode (Admin Only)
+router.put('/hardware-mode', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const { mode } = req.body; // "AUTO", "LORA", or "INTERNET"
+  await db.execute(
+    "UPDATE system_settings SET setting_value = ? WHERE setting_key = 'hardware_mode'",
+    [JSON.stringify(mode)]
+  );
+  res.json({ message: `Hardware mode set to ${mode}` });
 }));
 
 module.exports = router;
