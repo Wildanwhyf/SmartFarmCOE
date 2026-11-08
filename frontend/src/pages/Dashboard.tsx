@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { Radio, Globe, Settings2 } from "lucide-react"; // <-- Import ikon baru
 import SoilMoistureCard from "../components/dashboard/SoilMoistureCard";
 import TemperatureHumidityCard from "../components/dashboard/TemperatureHumidityCard";
 import NpkCard from "../components/dashboard/NpkCard";
@@ -12,6 +13,10 @@ export default function Dashboard() {
   const [liveData, setLiveData] = useState<LiveSensorApiResponse["data"] | null>(null);
   const [thresholds, setThresholds] = useState<Record<string, ThresholdItem>>({});
   const [guestConfig, setGuestConfig] = useState<GuestCardConfig | null>(null);
+  
+  // <-- State baru untuk menyimpan mode hardware saat ini
+  const [hardwareMode, setHardwareMode] = useState<"AUTO" | "LORA" | "INTERNET">("AUTO"); 
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>("--.--.--");
@@ -22,10 +27,12 @@ export default function Dashboard() {
       const token = localStorage.getItem("token");
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const [liveRes, threshRes, guestRes] = await Promise.all([
+      // Tambahkan fetch hardware-mode ke dalam Promise.all
+      const [liveRes, threshRes, guestRes, modeRes] = await Promise.all([
         fetch(`${baseUrl}/sensor/live`, { headers }),
         fetch(`${baseUrl}/thresholds`, { headers }),
         fetch(`${baseUrl}/config/guest-cards`, { headers }),
+        fetch(`${baseUrl}/config/hardware-mode`, { headers }), // <-- Fetch initial mode
       ]);
 
       if (!liveRes.ok) throw new Error("Failed to fetch live sensor reading");
@@ -50,6 +57,12 @@ export default function Dashboard() {
       if (guestRes.ok) {
         const guestResult = await guestRes.json();
         setGuestConfig(guestResult.data);
+      }
+
+      // Membaca initial mode dari database saat load pertama
+      if (modeRes.ok) {
+        const modeResult = await modeRes.json();
+        if (modeResult.mode) setHardwareMode(modeResult.mode);
       }
 
       setError(null);
@@ -101,6 +114,27 @@ export default function Dashboard() {
   const showLoraSignalCard = isModuleActive(["rssi", "snr"]);
   const showLoraConfigCard = isModuleActive(["status", "frequency", "spreading_factor", "bandwidth", "last_activity"]);
 
+ const handleModeChange = async (newMode: "AUTO" | "LORA" | "INTERNET") => {
+    try {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${baseUrl}/config/hardware-mode`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ mode: newMode })
+      });
+      
+      if (res.ok) {
+        setHardwareMode(newMode); 
+      }
+    } catch (err) {
+      console.error("Failed to change mode", err);
+    }
+  };
+
   return (
     <div className="px-4 py-5 lg:px-8 lg:py-7">
       <div className="flex items-start justify-between">
@@ -116,6 +150,62 @@ export default function Dashboard() {
           </span>
         )}
       </div>
+
+      {/* --- KOTAK KONTROL MODE HARDWARE --- */}
+      <div className="mt-6 rounded-xl border border-[#e3ebe4] bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-[#28402d]">
+              Hardware Transmission Mode
+            </h2>
+            <p className="mt-1 text-xs text-[#849187]">
+              Pilih jalur transmisi utama untuk pengiriman data sensor dari perangkat.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1 rounded-lg bg-[#f2f6f3] p-1 w-fit">
+            <button
+              type="button"
+              onClick={() => handleModeChange("AUTO")}
+              className={`flex items-center gap-1.5 rounded-md px-4 py-2 text-xs font-semibold transition-all ${
+                hardwareMode === "AUTO"
+                  ? "bg-[#347b49] text-white shadow-sm"
+                  : "text-[#5f7064] hover:text-[#152619] hover:bg-[#e7eee9]"
+              }`}
+            >
+              <Settings2 size={14} />
+              Auto
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleModeChange("LORA")}
+              className={`flex items-center gap-1.5 rounded-md px-4 py-2 text-xs font-semibold transition-all ${
+                hardwareMode === "LORA"
+                  ? "bg-[#347b49] text-white shadow-sm"
+                  : "text-[#5f7064] hover:text-[#152619] hover:bg-[#e7eee9]"
+              }`}
+            >
+              <Radio size={14} />
+              LoRa Only
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleModeChange("INTERNET")}
+              className={`flex items-center gap-1.5 rounded-md px-4 py-2 text-xs font-semibold transition-all ${
+                hardwareMode === "INTERNET"
+                  ? "bg-[#398bc7] text-white shadow-sm" 
+                  : "text-[#5f7064] hover:text-[#152619] hover:bg-[#e7eee9]"
+              }`}
+            >
+              <Globe size={14} />
+              Internet Only
+            </button>
+          </div>
+        </div>
+      </div>
+      {/* ------------------------------------- */}
 
       {loading && !liveData ? (
         <div className="mt-6 flex h-64 items-center justify-center rounded-2xl border border-[#e3ebe4] bg-white">

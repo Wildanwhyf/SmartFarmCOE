@@ -23,7 +23,8 @@ class SensorService {
       last_activity = null,
       throughput = null,
       packet_loss = null,
-      jitter = null
+      jitter = null,
+      transmission_method = 'UNKNOWN'
     } = payload;
 
     const connection = await db.getConnection();
@@ -45,8 +46,8 @@ class SensorService {
       // Updated INSERT query including new QoS parameters
       const insertQuery = `
         INSERT INTO sensor_readings 
-        (reading_time, kelembapan_tanah, suhu, tekanan, humidity, nitrogen, phosphorus, potassium, rssi, snr, status, frequency, spreading_factor, bandwidth, last_activity, throughput, delay, packet_loss, jitter)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (reading_time, kelembapan_tanah, suhu, tekanan, humidity, nitrogen, phosphorus, potassium, rssi, snr, status, frequency, spreading_factor, bandwidth, last_activity, throughput, delay, packet_loss, jitter,transmission_method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const parseNum = (val) => (val !== null && val !== undefined && val !== '' ? parseFloat(val) : null);
@@ -71,7 +72,8 @@ class SensorService {
         parseNum(throughput),
         delayMs,              // Automatically calculated delay in MS
         parseNum(packet_loss),
-        parseNum(jitter)
+        parseNum(jitter),
+        transmission_method
       ];
 
       const [result] = await connection.execute(insertQuery, values);
@@ -157,11 +159,11 @@ class SensorService {
     const limit = parseInt(pagination.limit, 10) || 10;
     const offset = (page - 1) * limit;
 
-    let whereClause = '';
+    let whereClauses = [];
     const queryParams = [];
 
-    // Handle predefined time windows (24h, 7d, 30d)
-    if (filters.window) {
+    // 1. Handle time windows
+    if (filters.window && filters.window !== 'all') {
       const intervalMap = {
         '1h': 'INTERVAL 1 HOUR',
         '6h': 'INTERVAL 6 HOUR',
@@ -171,22 +173,28 @@ class SensorService {
       };
       const intervalSQL = intervalMap[filters.window];
       if (intervalSQL) {
-        whereClause = `WHERE reading_time >= NOW() - ${intervalSQL}`;
+        whereClauses.push(`reading_time >= NOW() - ${intervalSQL}`);
       }
-    }
-    // Handle custom date ranges (choose a date)
-    else if (filters.startDate && filters.endDate) {
-      whereClause = 'WHERE reading_time BETWEEN ? AND ?';
+    } else if (filters.startDate && filters.endDate) {
+      whereClauses.push('reading_time BETWEEN ? AND ?');
       queryParams.push(new Date(filters.startDate), new Date(filters.endDate));
     }
 
-    // Build the final queries
-    const dataQuery = `SELECT * FROM sensor_readings ${whereClause} ORDER BY reading_time DESC LIMIT ? OFFSET ?`;
-    const countQuery = `SELECT COUNT(*) as total FROM sensor_readings ${whereClause}`;
+    // 2. Handle transmission method (LORA / INTERNET)
+    if (filters.method && (filters.method === 'LORA' || filters.method === 'INTERNET')) {
+      whereClauses.push('transmission_method = ?');
+      queryParams.push(filters.method);
+    }
 
-    // Execute queries
-    const [rows] = await db.query(dataQuery, [...queryParams, limit, offset]);
-    const [[{ total }]] = await db.query(countQuery, queryParams);
+    const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    // FIX: Masukkan limit dan offset secara langsung ke dalam string untuk mencegah error parameterisasi MySQL
+    const dataQuery = `SELECT * FROM sensor_readings ${whereString} ORDER BY reading_time DESC LIMIT ${limit} OFFSET ${offset}`;
+    const countQuery = `SELECT COUNT(*) as total FROM sensor_readings ${whereString}`;
+
+    // Gunakan db.execute untuk keamanan parameter lainnya
+    const [rows] = await db.execute(dataQuery, queryParams);
+    const [[{ total }]] = await db.execute(countQuery, queryParams);
 
     return {
       data: rows,
@@ -274,33 +282,38 @@ class SensorService {
     return { message: 'Warning acknowledged successfully' };
   }
 
-/**
-   * Fetch averaged sensor readings over a specific time window or custom date range.
-   */
+  /**
+     * Fetch averaged sensor readings over a specific time window or custom date range.
+     */
   async getAveragedReadings(filters = {}) {
-    let whereClause = '';
+    let whereClauses = [];
     const queryParams = [];
 
-    // 1. Handle custom date ranges
     if (filters.startDate && filters.endDate) {
-      whereClause = 'WHERE reading_time BETWEEN ? AND ?';
+      whereClauses.push('reading_time BETWEEN ? AND ?');
       queryParams.push(new Date(filters.startDate), new Date(filters.endDate));
-    } 
-    // 2. Handle predefined time windows (default to 24h)
-    else {
+    } else {
       const timeWindow = filters.window || '24h';
-      const intervalMap = {
-        '1h': 'INTERVAL 1 HOUR',
-        '6h': 'INTERVAL 6 HOUR',
-        '24h': 'INTERVAL 24 HOUR',
-        '7d': 'INTERVAL 7 DAY',
-        '30d': 'INTERVAL 30 DAY'
-      };
-      const intervalSQL = intervalMap[timeWindow] || intervalMap['24h'];
-      whereClause = `WHERE reading_time >= NOW() - ${intervalSQL}`;
+      if (timeWindow !== 'all') {
+        const intervalMap = {
+          '1h': 'INTERVAL 1 HOUR',
+          '6h': 'INTERVAL 6 HOUR',
+          '24h': 'INTERVAL 24 HOUR',
+          '7d': 'INTERVAL 7 DAY',
+          '30d': 'INTERVAL 30 DAY'
+        };
+        const intervalSQL = intervalMap[timeWindow] || intervalMap['24h'];
+        whereClauses.push(`reading_time >= NOW() - ${intervalSQL}`);
+      }
     }
 
-    // 3. Add QoS metrics to the SELECT query
+    if (filters.method && (filters.method === 'LORA' || filters.method === 'INTERNET')) {
+      whereClauses.push('transmission_method = ?');
+      queryParams.push(filters.method);
+    }
+
+    const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
     const query = `
       SELECT 
         COUNT(id) AS total_readings,
@@ -315,12 +328,11 @@ class SensorService {
         MIN(reading_time) AS window_start,
         MAX(reading_time) AS window_end
       FROM sensor_readings
-      ${whereClause}
+      ${whereString}
     `;
 
-    // Use db.query to allow parameterized inputs for custom dates
-    const [rows] = await db.query(query, queryParams);
-    
+    const [rows] = await db.execute(query, queryParams);
+
     return {
       filters,
       summary: rows[0]

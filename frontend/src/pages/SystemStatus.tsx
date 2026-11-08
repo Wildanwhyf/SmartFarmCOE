@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { ArrowDownUp, WifiOff, Zap, Timer } from "lucide-react";
+import { ArrowDownUp, WifiOff, Zap, Timer, Globe, Radio } from "lucide-react";
 import Card from "../components/common/Card";
 import SensorHistoryChart from "../components/dashboard/SensorHistoryChart";
 
@@ -10,6 +10,7 @@ interface SystemStatusData {
     delay?: number;
     status?: string;
     last_activity?: string;
+    transmission_method?: string;
 }
 
 interface FormattedHistory {
@@ -20,7 +21,6 @@ interface FormattedHistory {
     delay: number;
 }
 
-// 1. Added interface for the Averages API response
 interface SystemWindowSummary {
     total_readings: number;
     avg_throughput?: string;
@@ -36,13 +36,14 @@ export interface SystemOption {
 }
 
 const systemOptions: SystemOption[] = [
-    { label: "Throughput", value: "throughput", unit: "kbps" },
+    { label: "Throughput", value: "throughput", unit: "kbps/Mbps" },
     { label: "Packet Loss", value: "packet_loss", unit: "%" },
     { label: "Delay", value: "delay", unit: "ms" },
     { label: "Jitter", value: "jitter", unit: "ms" },
 ];
 
 export default function SystemStatus() {
+    const [dataSource, setDataSource] = useState<"LORA" | "INTERNET">("LORA");
     const [liveData, setLiveData] = useState<SystemStatusData | null>(null);
     const [historyData, setHistoryData] = useState<FormattedHistory[]>([]);
     const [selectedMetric, setSelectedMetric] = useState<SystemOption>(systemOptions[0]);
@@ -52,9 +53,7 @@ export default function SystemStatus() {
     const [startDate, setStartDate] = useState<string>("");
     const [endDate, setEndDate] = useState<string>("");
 
-    // 2. State to hold the averages
     const [windowSummary, setWindowSummary] = useState<SystemWindowSummary | null>(null);
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<string>("--.--.--");
@@ -65,43 +64,38 @@ export default function SystemStatus() {
             const token = localStorage.getItem("token");
             const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
-            // 3. Build dynamic URLs for both history AND averages
-            let historyUrl = `${baseUrl}/sensor/history/?page=1&limit=100`;
-            let avgUrl = `${baseUrl}/sensor/averages`;
+            // Buat endpoint history & averages dengan menyertakan parameter method (LORA / INTERNET)
+            let historyUrl = `${baseUrl}/sensor/history/?page=1&limit=100&method=${dataSource}`;
+            let avgUrl = `${baseUrl}/sensor/averages?method=${dataSource}`;
 
             if (selectedWindow === "custom" && startDate && endDate) {
                 historyUrl += `&startDate=${startDate}T00:00:00Z&endDate=${endDate}T23:59:59Z`;
-                avgUrl += `?startDate=${startDate}T00:00:00Z&endDate=${endDate}T23:59:59Z`;
+                avgUrl += `&startDate=${startDate}T00:00:00Z&endDate=${endDate}T23:59:59Z`;
             } else if (selectedWindow !== "all" && selectedWindow !== "custom") {
                 historyUrl += `&window=${selectedWindow}`;
-                avgUrl += `?window=${selectedWindow}`;
-            } else if (selectedWindow === "all") {
-                historyUrl += `&window=all`;
-                avgUrl += `?window=all`;
+                avgUrl += `&window=${selectedWindow}`;
             }
 
-            // Fetch live data, history data, AND averages simultaneously
-            const [liveRes, historyRes, avgRes] = await Promise.all([
-                fetch(`${baseUrl}/sensor/live`, { headers }),
+            const [historyRes, avgRes] = await Promise.all([
                 fetch(historyUrl, { headers }),
                 fetch(avgUrl, { headers })
             ]);
 
-            if (!liveRes.ok || !historyRes.ok) {
+            if (!historyRes.ok) {
                 throw new Error("Failed to fetch system data");
             }
 
-            // Process Live Data
-            const liveResult = await liveRes.json();
-            if (liveResult.data) {
-                setLiveData(liveResult.data);
-                const dateObj = new Date(liveResult.data.reading_time || liveResult.data.created_at || new Date());
-                setLastUpdated(dateObj.toTimeString().split(" ")[0].replace(/:/g, "."));
-            }
-
-            // Process History Data for Graph
             const historyResult = await historyRes.json();
             const rawHistory = historyResult.data || [];
+
+            // Ambil data paling atas (data live terbaru untuk sumber yang dipilih)
+            if (rawHistory.length > 0) {
+                setLiveData(rawHistory[0]);
+                const dateObj = new Date(rawHistory[0].reading_time || rawHistory[0].created_at || new Date());
+                setLastUpdated(dateObj.toTimeString().split(" ")[0].replace(/:/g, "."));
+            } else {
+                setLiveData(null);
+            }
 
             const formattedHistory: FormattedHistory[] = rawHistory.map((item: any) => {
                 const dateObj = new Date(item.reading_time || item.created_at);
@@ -121,7 +115,6 @@ export default function SystemStatus() {
 
             setHistoryData(formattedHistory);
 
-            // 4. Process Averages Data
             if (avgRes.ok) {
                 const avgResult = await avgRes.json();
                 setWindowSummary(avgResult.data?.summary || null);
@@ -134,11 +127,11 @@ export default function SystemStatus() {
         } finally {
             setLoading(false);
         }
-    }, [selectedWindow, startDate, endDate]);
+    }, [selectedWindow, startDate, endDate, dataSource]);
 
     useEffect(() => {
         fetchSystemData();
-        const interval = setInterval(fetchSystemData, 10000);
+        const interval = setInterval(fetchSystemData, 10000); 
         return () => clearInterval(interval);
     }, [fetchSystemData]);
 
@@ -146,14 +139,13 @@ export default function SystemStatus() {
     const packetLoss = liveData?.packet_loss ?? 0;
     const jitter = liveData?.jitter ?? 0;
     const delay = liveData?.delay ?? 0;
-    const isOnline = liveData?.status === "READY";
+    const isOnline = liveData !== null; // Jika ada data masuk dari channel ini
 
     const latestGraphValue = useMemo(() => {
         if (historyData.length === 0) return "--";
         return historyData[0][selectedMetric.value as keyof FormattedHistory];
     }, [historyData, selectedMetric]);
 
-    // 5. Helper function to pull the correct average based on the selected tab
     const getSelectedAverage = () => {
         if (!windowSummary) return "--";
         switch (selectedMetric.value) {
@@ -172,20 +164,45 @@ export default function SystemStatus() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight text-[#152619]">
-                        System Status
+                        System Status ({dataSource === "LORA" ? "LoRa Network Only" : "Internet Monitor Only"})
                     </h1>
                     <p className="mt-1 text-sm text-[#617565]">
-                        Network health, latency, and gateway diagnostics
+                        Dedicated QoS telemetry, latency, and transmission diagnostics
                     </p>
                 </div>
-                <div className="sm:text-right">
-                    <div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold tracking-wide ${isOnline ? "bg-[#e8f6eb] text-[#28733d]" : "bg-[#fde8e8] text-[#e02424]"}`}>
-                        <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-[#43c878] animate-pulse" : "bg-[#e02424]"}`} />
-                        {isOnline ? "GATEWAY ONLINE" : "OFFLINE"}
+
+                <div className="flex flex-col items-start sm:items-end gap-3">
+                    {/* Toggle Selector: LORA Only vs INTERNET Only */}
+                    <div className="flex items-center rounded-lg bg-[#e3ebe4] p-1 w-fit">
+                        <button
+                            type="button"
+                            onClick={() => setDataSource("LORA")}
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                                dataSource === "LORA" ? "bg-[#347b49] text-white shadow-sm" : "text-[#5f7064]"
+                            }`}
+                        >
+                            <Radio size={14} /> LoRa Only
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setDataSource("INTERNET")}
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                                dataSource === "INTERNET" ? "bg-[#398bc7] text-white shadow-sm" : "text-[#5f7064]"
+                            }`}
+                        >
+                            <Globe size={14} /> Internet Only
+                        </button>
                     </div>
-                    <p className="mt-1.5 text-[11px] font-mono text-[#849187]">
-                        Updated: {lastUpdated}
-                    </p>
+
+                    <div className="sm:text-right">
+                        <div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold tracking-wide ${isOnline ? "bg-[#e8f6eb] text-[#28733d]" : "bg-[#fde8e8] text-[#e02424]"}`}>
+                            <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-[#43c878] animate-pulse" : "bg-[#e02424]"}`} />
+                            {isOnline ? `${dataSource} CHANNEL ACTIVE` : `NO ${dataSource} SIGNAL`}
+                        </div>
+                        <p className="mt-1.5 text-[11px] font-mono text-[#849187]">
+                            Updated: {lastUpdated}
+                        </p>
+                    </div>
                 </div>
             </div>
 
@@ -198,7 +215,7 @@ export default function SystemStatus() {
             {/* Live Diagnostic Cards */}
             {loading && !liveData ? (
                 <div className="flex h-32 items-center justify-center rounded-2xl border border-[#e3ebe4] bg-white">
-                    <p className="text-sm font-medium text-[#617565]">Analyzing network health...</p>
+                    <p className="text-sm font-medium text-[#617565]">Analyzing {dataSource} health...</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-2">
@@ -212,7 +229,7 @@ export default function SystemStatus() {
                         </div>
                         <div className="mt-4">
                             <span className="text-3xl font-bold tracking-tight text-[#1f3022]">{throughput}</span>
-                            <span className="ml-1 text-sm font-medium text-[#849187]">kbps</span>
+                            <span className="ml-1 text-sm font-medium text-[#849187]">{dataSource === "INTERNET" ? "Mbps" : "kbps"}</span>
                         </div>
                     </Card>
 
@@ -264,19 +281,17 @@ export default function SystemStatus() {
 
             {/* Interactive Historical Trend Graph */}
             <Card className="mt-6 p-4 sm:p-5">
-                {/* Chart Header & Filters */}
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between border-b border-[#edf1ed] pb-5">
                     <div>
                         <h2 className="text-sm font-semibold text-[#28402d]">
-                            {selectedMetric.label} Trend
+                            {selectedMetric.label} Trend ({dataSource})
                         </h2>
                         <p className="mt-1 text-xs text-[#849187]">
-                            Historical network performance
+                            Historical performance for isolated stream
                         </p>
                     </div>
 
                     <div className="flex flex-col items-start lg:items-end gap-3 w-full lg:w-auto">
-                        {/* Dynamic Metric Selector */}
                         <div className="flex flex-wrap gap-2">
                             {systemOptions.map((opt) => {
                                 const isSelected = selectedMetric.value === opt.value;
@@ -285,10 +300,9 @@ export default function SystemStatus() {
                                         key={opt.value}
                                         type="button"
                                         onClick={() => setSelectedMetric(opt)}
-                                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${isSelected
-                                            ? "bg-[#347b49] text-white shadow-sm"
-                                            : "bg-[#f2f6f3] text-[#5f7064] hover:bg-[#e7eee9]"
-                                            }`}
+                                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                                            isSelected ? "bg-[#347b49] text-white shadow-sm" : "bg-[#f2f6f3] text-[#5f7064] hover:bg-[#e7eee9]"
+                                        }`}
                                     >
                                         {opt.label}
                                     </button>
@@ -296,7 +310,6 @@ export default function SystemStatus() {
                             })}
                         </div>
 
-                        {/* Time Window & Date Picker Row */}
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                             <div className="flex items-center gap-1 rounded-lg bg-[#f2f6f3] p-1 text-[11px]">
                                 {(["all", "24h", "7d", "30d", "custom"] as const).map((win) => {
@@ -310,9 +323,11 @@ export default function SystemStatus() {
                                     return (
                                         <button
                                             key={win}
+                                            type="button"
                                             onClick={() => setSelectedWindow(win)}
-                                            className={`rounded-md px-2.5 py-1 font-semibold transition ${selectedWindow === win ? "bg-[#347b49] text-white shadow-sm" : "text-[#5f7064] hover:text-[#152619]"
-                                                }`}
+                                            className={`rounded-md px-2.5 py-1 font-semibold transition ${
+                                                selectedWindow === win ? "bg-[#347b49] text-white shadow-sm" : "text-[#5f7064] hover:text-[#152619]"
+                                            }`}
                                         >
                                             {labels[win]}
                                         </button>
@@ -320,7 +335,6 @@ export default function SystemStatus() {
                                 })}
                             </div>
 
-                            {/* Custom Date Pickers */}
                             {selectedWindow === "custom" && (
                                 <div className="flex items-center gap-2 bg-[#fdfcfb] border border-[#e3ebe4] p-1.5 rounded-lg shadow-xs">
                                     <input
@@ -342,7 +356,6 @@ export default function SystemStatus() {
                     </div>
                 </div>
 
-                {/* Current Graph Value Header */}
                 <div className="mt-5 flex items-end gap-2">
                     <span className="text-3xl font-semibold tracking-tight text-[#25352a]">
                         {latestGraphValue}
@@ -352,7 +365,6 @@ export default function SystemStatus() {
                     </span>
                 </div>
 
-                {/* Actual Chart Component */}
                 <div className="mt-4 overflow-hidden">
                     {loading && historyData.length === 0 ? (
                         <div className="flex h-64 items-center justify-center text-xs text-[#617565]">
@@ -368,10 +380,10 @@ export default function SystemStatus() {
                     )}
                 </div>
 
-                {/* 6. Averages Section (Matches Sensor History styling) */}
+                {/* Averages Section */}
                 <div className="mt-6 border-t border-[#edf1ed] pt-5">
                     <h3 className="text-xs font-semibold text-[#28402d] mb-4">
-                        Statistical Aggregates
+                        Statistical Aggregates ({dataSource})
                     </h3>
 
                     <div className="grid grid-cols-2 gap-4 sm:gap-3 sm:grid-cols-4">
@@ -385,7 +397,7 @@ export default function SystemStatus() {
                         </div>
 
                         <div>
-                            <p className="text-[11px] text-[#849187]">Total Network Samples</p>
+                            <p className="text-[11px] text-[#849187]">Total Samples</p>
                             <p className="mt-1 text-sm font-semibold text-[#3b5141]">
                                 {windowSummary?.total_readings ?? "--"} readings
                             </p>
@@ -399,7 +411,7 @@ export default function SystemStatus() {
                         </div>
 
                         <div>
-                            <p className="text-[11px] text-[#849187]">Avg Latency</p>
+                            <p className="text-[11px] text-[#849187]">Avg Delay</p>
                             <p className="mt-1 text-sm font-semibold text-[#d99f24]">
                                 {windowSummary?.avg_delay ? parseFloat(windowSummary.avg_delay).toFixed(2) : "--"} ms
                             </p>
@@ -408,7 +420,6 @@ export default function SystemStatus() {
                 </div>
 
             </Card>
-
         </div>
     );
 }
