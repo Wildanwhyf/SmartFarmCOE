@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Radio, Globe, Settings2 } from "lucide-react"; // <-- Import ikon baru
 import SoilMoistureCard from "../components/dashboard/SoilMoistureCard";
 import TemperatureHumidityCard from "../components/dashboard/TemperatureHumidityCard";
@@ -9,7 +9,41 @@ import AlertsCard from "../components/dashboard/AlertsCard";
 import type { LiveSensorApiResponse, ThresholdItem, GuestCardConfig } from "../types/sensor";
 import WeatherCard from "../components/dashboard/WeatherCard";
 
+function checkIsAdmin(): boolean {
+  const token = localStorage.getItem("token");
+  if (!token) return false;
+
+  try {
+    // 1. Decode payload JWT token
+    const base64Url = token.split(".")[1];
+    if (base64Url) {
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const payload = JSON.parse(window.atob(base64));
+      if (payload.role && payload.role.toLowerCase() === "admin") {
+        return true;
+      }
+    }
+  } catch {
+    // Abaikan jika token bukan format JWT standar
+  }
+
+  // 2. Fallback: cek jika role atau object user disimpan terpisah di localStorage
+  const storedRole = localStorage.getItem("role");
+  if (storedRole && storedRole.toLowerCase() === "admin") return true;
+
+  try {
+    const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    if (storedUser.role && storedUser.role.toLowerCase() === "admin") return true;
+  } catch {
+    // Abaikan jika gagal parse JSON
+  }
+
+  return false;
+}
+
 export default function Dashboard() {
+  const isAdmin = useMemo(() => checkIsAdmin(), []);
+  
   const [liveData, setLiveData] = useState<LiveSensorApiResponse["data"] | null>(null);
   const [thresholds, setThresholds] = useState<Record<string, ThresholdItem>>({});
   const [guestConfig, setGuestConfig] = useState<GuestCardConfig | null>(null);
@@ -115,6 +149,7 @@ export default function Dashboard() {
   const showLoraConfigCard = isModuleActive(["status", "frequency", "spreading_factor", "bandwidth", "last_activity"]);
 
  const handleModeChange = async (newMode: "AUTO" | "LORA" | "INTERNET") => {
+  if (!isAdmin) return;
     try {
       const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
       const token = localStorage.getItem("token");
@@ -152,6 +187,7 @@ export default function Dashboard() {
       </div>
 
       {/* --- KOTAK KONTROL MODE HARDWARE --- */}
+      {isAdmin && (
       <div className="mt-6 rounded-xl border border-[#e3ebe4] bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -205,6 +241,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      )}
       {/* ------------------------------------- */}
 
       {loading && !liveData ? (
