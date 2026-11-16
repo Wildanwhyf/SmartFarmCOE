@@ -21,8 +21,6 @@ export const sensorOptions: SensorOption[] = [
   { label: "LoRa RSSI", value: "rssi", unit: "dBm" },
   { label: "LoRa SNR", value: "snr", unit: "dB" },
   { label: "Throughput", value: "throughput", unit: "kbps/Mbps" },
-  { label: "Delay", value: "delay", unit: "ms" },
-  { label: "Packet Loss", value: "packet_loss", unit: "%" },
   { label: "Jitter", value: "jitter", unit: "ms" },
 ];
 
@@ -40,8 +38,6 @@ export interface FormattedReading {
   rssi: number;
   snr: number;
   throughput: number;
-  delay: number;
-  packet_loss: number;
   jitter: number;
   transmission_method: string;
   rawTime: string;
@@ -159,8 +155,6 @@ export default function SensorHistory() {
           rssi: item.rssi || 0,
           snr: parseFloat(item.snr || "0"),
           throughput: parseFloat(item.throughput || "0"),
-          delay: parseInt(item.delay || "0", 10),
-          packet_loss: parseFloat(item.packet_loss || "0"),
           jitter: parseFloat(item.jitter || "0"),
           transmission_method: item.transmission_method || "UNKNOWN",
           rawTime: item.reading_time || item.created_at,
@@ -206,7 +200,7 @@ export default function SensorHistory() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchHistoryData, page, selectedWindow, startDate, endDate]);
+  }, [fetchHistoryData, page, selectedWindow, transmissionMethod, startDate, endDate]);
 
   const activeSensorOptions = useMemo(() => {
     return sensorOptions.filter((option) => {

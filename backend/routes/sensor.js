@@ -85,9 +85,9 @@ router.patch('/warnings/:id/acknowledge', authenticate, requireFarmerOrAdmin, as
 
 // GET /api/sensor/averages?window=24h OR ?startDate=...&endDate=...
 router.get('/averages/', asyncHandler(async (req, res) => {
-  const { window, startDate, endDate } = req.query;
+  const { window, startDate, endDate, method } = req.query;
 
-  const averages = await sensorService.getAveragedReadings({ window, startDate, endDate });
+  const averages = await sensorService.getAveragedReadings({ window, startDate, endDate, method});
 
   res.status(200).json({
     message: 'Averaged sensor readings retrieved successfully',
